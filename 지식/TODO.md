@@ -1,12 +1,21 @@
 ---
 상태: 설계
 범위: 프로젝트:Entry Debugger
-갱신: 2026-06-23
+갱신: 2026-06-24
 ---
 
 # Entry Debugger 할 일
 
 현재 열린 항목 없음.
+
+> **완료(2026-06-24)**
+> - `Alt` 단일 블록 드래그가 실제 마우스 이벤트에서 동작하지 않던 문제와,
+>   statement 내부 첫 블록(`만일 참이라면 { x좌표 -> y좌표 }`의 `x좌표` 등)이
+>   단일 분리되지 않던 문제를 수정(`ca5a6a3`).
+> - `main`에 남아 있지 않은 작업 후보를 점검했다. 원격 미병합 브랜치는 없고,
+>   stale 로컬 브랜치 `feature/boost-toggle-fullscreen-position`,
+>   `feature/debug-tab-icon`, `feature/function-number-to-hangul`,
+>   `fix/remove-eo-uploader-coordinate`와 관련 `_review` worktree를 삭제했다.
 
 > **완료(2026-06-23)**
 > - `만약~라면~아니면` 블록 텍스트 복사 오류 수정(`523bf43`), 함수 보관함
