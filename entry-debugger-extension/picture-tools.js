@@ -735,12 +735,13 @@
   var imageSvgData = {};    // picture.id -> 고친 svg 문자열(깨진 모양만 캐시)
   var renderingFix = {};    // picture.id -> true (동시 중복 렌더 방지)
 
-  // 깨졌는지 확인할 svg의 URL. Entry 원본 Painter.getImageSrc처럼 picture.fileurl(엔트리가 아는 완성 주소)을
-  // 먼저 쓰고, 없으면 Entry.defaultPath(로컬/프록시/CDN 대응) 기준으로 조립한다. location.origin 직접 조립은
-  // 배포 도메인과 업로드 호스트가 다른 환경에서 깨지므로 최후 폴백으로만 둔다.
+  // 깨졌는지 확인할 svg의 URL. Entry 원본 Painter.getImageSrc처럼 picture.fileurl(엔트리가 아는 완성 주소)이
+  // 있으면 무조건 그대로 쓴다 — 서명 URL·프록시·CDN·미디어 엔드포인트처럼 .svg로 안 끝나는 주소도 포함. 없을
+  // 때만 Entry.defaultPath(getImageSrc와 동일 기준) 기준으로 조립하고, location.origin은 최후 폴백으로만 둔다.
+  // (fileurl이 svg가 아니어도 아래 fetch+DOMParser가 파싱 실패로 '네이티브에 맡김' 처리하므로 안전.)
   function pictureSvgUrl(p) {
     if (!p) return null;
-    if (p.fileurl && /\.svg(\?|$)/i.test(p.fileurl)) return p.fileurl;    // 엔트리가 준 svg 주소 그대로
+    if (p.fileurl) return p.fileurl;                                     // 엔트리가 준 주소 그대로(무조건 우선)
     var f = p.filename;
     if (!f || f.length < 4) return null;
     var entry = safeGetEntry();
@@ -821,11 +822,7 @@
       var P = protos[i];
       if (!P || !P.prototype || typeof P.prototype.getImageData === 'function') continue;  // 이미 있으면 안 건드림
       var proto = P.prototype;
-      canvasPatchSaved.push({
-        proto: proto,
-        hadOwn: Object.prototype.hasOwnProperty.call(proto, 'getImageData'),
-        original: proto.getImageData
-      });
+      canvasPatchSaved.push({ proto: proto, descriptor: Object.getOwnPropertyDescriptor(proto, 'getImageData') });
       proto.getImageData = function () {
         var ctx = this.getContext && this.getContext('2d');
         return ctx ? ctx.getImageData.apply(ctx, arguments) : null;
@@ -840,10 +837,16 @@
     for (var i = 0; i < saved.length; i++) {
       var s = saved[i];
       try {
-        if (s.hadOwn) s.proto.getImageData = s.original;   // 원래 값 원복
-        else delete s.proto.getImageData;                  // 우리가 만든 것 → 삭제(순정 복귀)
+        if (s.descriptor) Object.defineProperty(s.proto, 'getImageData', s.descriptor);  // 원래 디스크립터 복원
+        else delete s.proto.getImageData;                                                // 우리가 만든 것 → 삭제(순정)
       } catch (e) {}
     }
+  }
+  // 기능 OFF 등으로 즉시 순정이 필요할 때: 진행 중이던 수리의 부작용(임시 폴리필·저장 토글 억제 창)을 강제 정리한다.
+  // 예약된 uninstall 타이머가 남아도 depth를 1로 맞춰 1회만 원복 → 이후 타이머는 depth<=0이라 no-op(이중 원복 방지).
+  function forceCleanupRepairSideEffects() {
+    suppressImportUntil = 0;
+    if (canvasPatchDepth > 0) { canvasPatchDepth = 1; uninstallCanvasGetImageData(); }
   }
 
   // (2) 저장 토글 억제: addSVG의 스냅샷을 Entry 원본 addPicture와 똑같이 isImport=true("자동 import")로 표시해
@@ -867,6 +870,23 @@
     });
   }
 
+  // 자동 import 창을 "첫 사용자 입력"에 즉시 닫는다. 자동 import(addSVG)는 포인터 입력이 없으므로, 사용자가
+  // 그 모양을 실제로 그리기 시작하면(pointerdown/mousedown) 창이 닫혀 그 편집의 스냅샷은 억제 밖 → 수정됨이
+  // 정상 기록된다. 즉 시간이 아니라 "실제 사용자 편집 시작"을 경계로 삼아, 자동 import만 억제한다.
+  function closeImportWindowOnUserInput() {
+    function onDown() {
+      suppressImportUntil = 0;
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('mousedown', onDown, true);
+    }
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('mousedown', onDown, true);
+    setTimeout(function () {                        // 시간으로 창이 닫혔으면 리스너도 정리(잔재 없음)
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('mousedown', onDown, true);
+    }, IMPORT_SETTLE_MS);
+  }
+
   // 고친 svg를 편집창에 직접 그린다. 네이티브 로드(실패)가 끝나도록 잠깐 기다린 뒤 reset + addSVG 1회.
   // addSVG의 부작용(저장 토글·getImageData 예외)은 위 유틸로 "그 순간에만" 억제한다(isImport + 임시 폴리필).
   function renderFixedSvg(p, fixedSvg) {
@@ -888,6 +908,7 @@
           installImportSuppressor(pt, ep);
           suppressPictureId = p.id;
           suppressImportUntil = Date.now() + IMPORT_SETTLE_MS;
+          closeImportWindowOnUserInput();                  // 사용자가 이 모양을 실제 편집하기 시작하면 창 즉시 종료
           try { pt.isImport = true; } catch (e) {}         // addSVG의 첫(동기) 스냅샷 커버
           installCanvasGetImageData();
           try { ep.addSVG(fixedSvg); } catch (e) {}
@@ -1994,6 +2015,7 @@
       stopObserver();
       cancelUploadWork();
       clearSelAndHighlight();
+      forceCleanupRepairSideEffects();   // 진행 중이던 벡터 수리의 임시 폴리필·저장 토글 억제 창을 즉시 정리(OFF=순정)
     }
     post('PICTURE_TOOLS_RESULT', { success: true, enabled: enabled }, msg.requestId);
   });
