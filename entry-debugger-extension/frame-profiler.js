@@ -214,19 +214,27 @@
   /* ───────── 클릭 → 실제 코드로 점프+하이라이트 ───────── */
   // (function-usage-inspector.js 의 focusBlockWhenReady 패턴)
   var jumpStopGuard = false;
-  // 점프(오브젝트 선택/블록 활성화)가 실행·일시정지를 "정지"로 바꾸지 않도록, 점프하는 동안만
-  // engine.stop / toggleStop 을 잠깐 무력화한다(focusBlock 재시도 ~1.44s를 덮는 1.6s 뒤 복원).
+  var releaseStopGuard = null;   // suppressEngineStop이 건 무력화를 원복하는 함수(점프 완료 시 즉시 호출)
+  // 점프(오브젝트 선택/블록 활성화)가 실행·일시정지를 "정지"로 바꾸지 않도록, 점프하는 "그 구간에만"
+  // engine.stop / toggleStop 을 무력화한다. focusBlock이 실제로 블록을 활성화(또는 포기)하면 곧바로 원복해
+  // 사용자의 수동 정지를 다시 허용하고, 끝내 자원을 못 잡으면 안전망으로 1.6초 뒤 강제 원복한다(무한 무력화 방지).
   function suppressEngineStop(eng) {
     if (!eng || jumpStopGuard) return;
     var realStop = eng.stop, realToggle = eng.toggleStop;
     jumpStopGuard = true;
     if (typeof eng.stop === 'function') eng.stop = function () {};
     if (typeof eng.toggleStop === 'function') eng.toggleStop = function () {};
-    setTimeout(function () {
+    var restored = false;
+    function restore() {
+      if (restored) return;
+      restored = true;
       if (typeof realStop === 'function' && eng.stop !== realStop) eng.stop = realStop;
       if (typeof realToggle === 'function' && eng.toggleStop !== realToggle) eng.toggleStop = realToggle;
       jumpStopGuard = false;
-    }, 1600);
+      if (releaseStopGuard === restore) releaseStopGuard = null;
+    }
+    releaseStopGuard = restore;
+    setTimeout(restore, 1600);   // 안전망: focusBlock이 끝내 못 끝내도 반드시 원복
   }
   function jumpToCode(objId, hatId) {
     var E = safeGetEntry();
@@ -253,9 +261,10 @@
       // activateBlock = 해당 블록으로 스크롤 + 하이라이트(이동용). setSelectedBlock("편집 선택")은
       // 선택 이벤트가 실행 중 편집으로 간주돼 정지를 유발하므로 쓰지 않는다.
       try { if (typeof board.activateBlock === 'function') board.activateBlock(block); } catch (e) {}
+      if (releaseStopGuard) releaseStopGuard();   // 점프 완료 → 정지 무력화 즉시 해제(수동 정지 다시 허용)
       return;
     }
-    if (attempt >= 12) return;
+    if (attempt >= 12) { if (releaseStopGuard) releaseStopGuard(); return; }   // 포기 → 해제
     setTimeout(function () { focusBlock(objId, hatId, attempt + 1); }, 120);
   }
 
