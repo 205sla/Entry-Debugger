@@ -213,45 +213,53 @@
 
   /* ───────── 클릭 → 실제 코드로 점프+하이라이트 ───────── */
   // (function-usage-inspector.js 의 focusBlockWhenReady 패턴)
-  var jumpStopGuard = false;
-  var releaseStopGuard = null;   // suppressEngineStop이 건 무력화를 원복하는 함수(점프 완료 시 즉시 호출)
   // 점프(오브젝트 선택/블록 활성화)가 실행·일시정지를 "정지"로 바꾸지 않도록, 점프하는 "그 구간에만"
-  // engine.stop / toggleStop 을 무력화한다. focusBlock이 실제로 블록을 활성화(또는 포기)하면 곧바로 원복해
-  // 사용자의 수동 정지를 다시 허용하고, 끝내 자원을 못 잡으면 안전망으로 1.6초 뒤 강제 원복한다(무한 무력화 방지).
-  function suppressEngineStop(eng) {
-    if (!eng || jumpStopGuard) return;
-    var realStop = eng.stop, realToggle = eng.toggleStop;
-    jumpStopGuard = true;
-    if (typeof eng.stop === 'function') eng.stop = function () {};
-    if (typeof eng.toggleStop === 'function') eng.toggleStop = function () {};
-    var restored = false;
-    function restore() {
-      if (restored) return;
-      restored = true;
-      if (typeof realStop === 'function' && eng.stop !== realStop) eng.stop = realStop;
-      if (typeof realToggle === 'function' && eng.toggleStop !== realToggle) eng.toggleStop = realToggle;
-      jumpStopGuard = false;
-      if (releaseStopGuard === restore) releaseStopGuard = null;
+  // engine.stop / toggleStop 을 무력화한다. 여러 점프가 겹칠 수 있으므로 참조 카운트로 관리한다 — 각 점프가
+  // 시작 시 acquire, 완료(또는 안전망 폴백)에서 정확히 1번 release, 마지막 점프가 끝나야 실제 원복. focusBlock이
+  // 블록을 activateBlock 하는 즉시 그 점프를 release하므로, 점프가 빨리 끝나면 수동 정지도 그만큼 빨리 되살아난다.
+  var stopGuardDepth = 0;
+  var stopGuardEng = null, stopGuardRealStop = null, stopGuardRealToggle = null;
+  function acquireStopSuppression(eng) {
+    if (!eng) return null;
+    if (stopGuardDepth === 0) {                       // 첫 점프만 실제 무력화 설치(겹친 점프는 원본 캡처 공유)
+      stopGuardEng = eng;
+      stopGuardRealStop = eng.stop;
+      stopGuardRealToggle = eng.toggleStop;
+      if (typeof eng.stop === 'function') eng.stop = function () {};
+      if (typeof eng.toggleStop === 'function') eng.toggleStop = function () {};
     }
-    releaseStopGuard = restore;
-    setTimeout(restore, 1600);   // 안전망: focusBlock이 끝내 못 끝내도 반드시 원복
+    stopGuardDepth++;
+    var released = false;
+    function release() {
+      if (released) return;                          // 이 점프는 정확히 1번만 release
+      released = true;
+      if (--stopGuardDepth > 0) return;              // 다른 점프가 아직 진행 중 → 무력화 유지
+      if (stopGuardEng) {
+        if (typeof stopGuardRealStop === 'function' && stopGuardEng.stop !== stopGuardRealStop) stopGuardEng.stop = stopGuardRealStop;
+        if (typeof stopGuardRealToggle === 'function' && stopGuardEng.toggleStop !== stopGuardRealToggle) stopGuardEng.toggleStop = stopGuardRealToggle;
+      }
+      stopGuardEng = null; stopGuardRealStop = null; stopGuardRealToggle = null;
+    }
+    setTimeout(release, 1600);                        // 안전망: 이 점프가 끝내 완료 안 돼도 반드시 release
+    return release;
   }
   function jumpToCode(objId, hatId) {
     var E = safeGetEntry();
     if (!E || !E.container) return;
-    // 실행/일시정지 중이면 점프 때문에 작품이 멈추지 않도록 정지를 잠깐 막는다.
+    // 실행/일시정지 중이면 점프 때문에 작품이 멈추지 않도록 이 점프 구간의 정지를 막는다(점프별 release 토큰).
     var eng = E.engine;
+    var release = null;
     if (eng && typeof eng.isState === 'function' && (eng.isState('pause') || eng.isState('run'))) {
-      suppressEngineStop(eng);
+      release = acquireStopSuppression(eng);
     }
     // 이미 그 오브젝트가 선택돼 있으면 selectObject 호출 자체를 건너뛴다(정지 트리거 회피).
     var cur = E.playground && E.playground.object;
     if ((!cur || cur.id !== objId) && typeof E.container.selectObject === 'function') {
       try { E.container.selectObject(objId); } catch (e) {}
     }
-    focusBlock(objId, hatId, 0);
+    focusBlock(objId, hatId, 0, release);
   }
-  function focusBlock(objId, hatId, attempt) {
+  function focusBlock(objId, hatId, attempt, release) {
     var E = safeGetEntry();
     var obj = E && E.container && typeof E.container.getObject === 'function' ? E.container.getObject(objId) : null;
     var block = obj && obj.script && typeof obj.script.findById === 'function' ? obj.script.findById(hatId) : null;
@@ -261,11 +269,11 @@
       // activateBlock = 해당 블록으로 스크롤 + 하이라이트(이동용). setSelectedBlock("편집 선택")은
       // 선택 이벤트가 실행 중 편집으로 간주돼 정지를 유발하므로 쓰지 않는다.
       try { if (typeof board.activateBlock === 'function') board.activateBlock(block); } catch (e) {}
-      if (releaseStopGuard) releaseStopGuard();   // 점프 완료 → 정지 무력화 즉시 해제(수동 정지 다시 허용)
+      if (release) release();   // 이 점프 완료 → 정지 무력화 해제(마지막 점프면 실제 원복)
       return;
     }
-    if (attempt >= 12) { if (releaseStopGuard) releaseStopGuard(); return; }   // 포기 → 해제
-    setTimeout(function () { focusBlock(objId, hatId, attempt + 1); }, 120);
+    if (attempt >= 12) { if (release) release(); return; }   // 포기 → 해제
+    setTimeout(function () { focusBlock(objId, hatId, attempt + 1, release); }, 120);
   }
 
   /* ───────── 프레임 루프: EMA 누적 ───────── */
