@@ -845,7 +845,7 @@
   // 기능 OFF 등으로 즉시 순정이 필요할 때: 진행 중이던 수리의 부작용(임시 폴리필·저장 토글 억제 창)을 강제 정리한다.
   // 예약된 uninstall 타이머가 남아도 depth를 1로 맞춰 1회만 원복 → 이후 타이머는 depth<=0이라 no-op(이중 원복 방지).
   function forceCleanupRepairSideEffects() {
-    suppressImportUntil = 0;
+    closeImportWindow();                                  // 저장 토글 억제 창 + isImport 프라임 해제
     if (canvasPatchDepth > 0) { canvasPatchDepth = 1; uninstallCanvasGetImageData(); }
   }
 
@@ -856,6 +856,15 @@
   var suppressImportUntil = 0;
   var suppressPictureId = null;
   var hookedEntryPaint = null;
+  // 저장 토글 억제 창을 닫는다: 시간창(suppressImportUntil)을 끄고, 스냅샷 리스너가 "다음 import"용으로 켜 둔
+  // painter.isImport 프라임도 false로 되돌린다. 이 프라임을 남기면 창이 닫힌 뒤 첫 사용자 편집이 import로 오인돼
+  // 유실될 수 있다(스냅샷 이벤트가 아닌 경로 — 사용자 입력/타임아웃/OFF — 로 창을 닫을 때 반드시 함께 호출).
+  function closeImportWindow() {
+    suppressImportUntil = 0;
+    var pg = getPlayground();
+    var ptx = pg && pg.painter;
+    if (ptx) { try { ptx.isImport = false; } catch (e) {} }
+  }
   function installImportSuppressor(pt, ep) {
     if (!ep || hookedEntryPaint === ep || typeof ep.on !== 'function') return;
     hookedEntryPaint = ep;
@@ -875,7 +884,7 @@
   // 정상 기록된다. 즉 시간이 아니라 "실제 사용자 편집 시작"을 경계로 삼아, 자동 import만 억제한다.
   function closeImportWindowOnUserInput() {
     function onDown() {
-      suppressImportUntil = 0;
+      closeImportWindow();                         // 창 닫고 isImport 프라임 해제 → 이 편집은 수정됨으로 기록됨
       document.removeEventListener('pointerdown', onDown, true);
       document.removeEventListener('mousedown', onDown, true);
     }
@@ -898,11 +907,14 @@
     renderingFix[p.id] = true;
     setTimeout(function () {
       var o = curObj();
-      if (!o || !o.selectedPicture || o.selectedPicture.id !== p.id) { delete renderingFix[p.id]; return; }  // 다른 모양으로 넘어감
+      // 지연 중 기능이 OFF됐거나 다른 모양으로 넘어가면 즉시 중단(편집기·prototype 손대지 않음).
+      if (!enabled || !o || !o.selectedPicture || o.selectedPicture.id !== p.id) { delete renderingFix[p.id]; return; }
       var switched = ensureVectorMode(ep);     // 벡터 모양 → 비트맵 모드면 벡터로 전환(안 하면 비트맵으로 남아 잘못 저장됨)
       setTimeout(function () {
+        if (!enabled) { delete renderingFix[p.id]; return; }   // 전환 대기 중 OFF → 편집기 reset도 하지 않음
         try { ep.reset(); } catch (e) {}
         setTimeout(function () {
+          if (!enabled) { delete renderingFix[p.id]; return; } // 최종 지연 중 OFF → 폴리필·addSVG 자체를 하지 않음(OFF=순정)
           // 자동 렌더(addSVG)의 스냅샷을 Entry 원본 addPicture와 동일하게 isImport로 "저장 토글 없이" 처리하고,
           // 비동기 이미지 처리 창 동안만 getImageData 폴리필을 심는다(창이 닫히면 둘 다 원복). 반복 modified=false 제거.
           installImportSuppressor(pt, ep);
@@ -914,7 +926,7 @@
           try { ep.addSVG(fixedSvg); } catch (e) {}
           delete renderingFix[p.id];                        // reset+addSVG(임계영역) 끝 → 재렌더 허용(탭 재진입 등)
           setTimeout(function () {
-            if (suppressPictureId === p.id) suppressImportUntil = 0;   // 우리 창 종료(다른 렌더가 새로 열었으면 안 건드림)
+            if (suppressPictureId === p.id) closeImportWindow();       // 우리 창 종료+isImport 프라임 해제(다른 렌더면 안 건드림)
             uninstallCanvasGetImageData();                             // 임시 폴리필 원복(순정 복귀)
           }, IMPORT_SETTLE_MS);
         }, 100);
