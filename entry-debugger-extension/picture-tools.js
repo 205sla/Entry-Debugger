@@ -15,25 +15,6 @@
   if (window.__ENTRY_DEBUGGER_PICTURE_TOOLS_INJECTED__) return;
   window.__ENTRY_DEBUGGER_PICTURE_TOOLS_INJECTED__ = true;
 
-  // entry-paint(Entry 벡터 편집기) 버그 우회: 임베드-이미지 벡터를 처리할 때 2D 컨텍스트가 아니라
-  // <canvas> 엘리먼트에 .getImageData()를 직접 호출해 "getImageData is not a function" 예외가 나고,
-  // 그 결과 모양이 편집창에 안 뜨고 깨진다(빈/비트맵). 캔버스 prototype에 컨텍스트로 위임하는
-  // 폴리필을 더해 우회한다(누락된 메서드만 보강하므로 안전). 라이브로 효과 확인됨.
-  (function () {
-    function addGetImageData(P) {
-      try {
-        if (P && P.prototype && typeof P.prototype.getImageData !== 'function') {
-          P.prototype.getImageData = function () {
-            var ctx = this.getContext && this.getContext('2d');
-            return ctx ? ctx.getImageData.apply(ctx, arguments) : null;
-          };
-        }
-      } catch (e) {}
-    }
-    addGetImageData(window.HTMLCanvasElement);
-    if (typeof OffscreenCanvas !== 'undefined') addGetImageData(OffscreenCanvas);
-  })();
-
   var CHANNEL = '__ENTRY_DEBUGGER__';
   var RETRY_INTERVAL = 300;
   var RETRY_TIMEOUT = 30000;
@@ -754,10 +735,17 @@
   var imageSvgData = {};    // picture.id -> 고친 svg 문자열(깨진 모양만 캐시)
   var renderingFix = {};    // picture.id -> true (동시 중복 렌더 방지)
 
+  // 깨졌는지 확인할 svg의 URL. Entry 원본 Painter.getImageSrc처럼 picture.fileurl(엔트리가 아는 완성 주소)을
+  // 먼저 쓰고, 없으면 Entry.defaultPath(로컬/프록시/CDN 대응) 기준으로 조립한다. location.origin 직접 조립은
+  // 배포 도메인과 업로드 호스트가 다른 환경에서 깨지므로 최후 폴백으로만 둔다.
   function pictureSvgUrl(p) {
-    var f = p && p.filename;
+    if (!p) return null;
+    if (p.fileurl && /\.svg(\?|$)/i.test(p.fileurl)) return p.fileurl;    // 엔트리가 준 svg 주소 그대로
+    var f = p.filename;
     if (!f || f.length < 4) return null;
-    return location.origin + '/uploads/' + f.substring(0, 2) + '/' + f.substring(2, 4) + '/image/' + f + '.svg';
+    var entry = safeGetEntry();
+    var base = (entry && entry.defaultPath) || location.origin;          // Painter.getImageSrc와 동일 기준
+    return base + '/uploads/' + f.substring(0, 2) + '/' + f.substring(2, 4) + '/image/' + f + '.svg';
   }
 
   // 편집창을 벡터 모드로 전환한다(벡터/비트맵 토글의 '벡터' 클릭). 깨진 svg(벡터 모양)를 비트맵 모드에서
@@ -813,8 +801,74 @@
     catch (e) { return false; }
   }
 
+  /* ─── entry-paint 자동 렌더의 부작용을 "그 순간에만" 억제하는 유틸 ───
+     addSVG는 (1) 임베드 이미지를 래스터화할 때 <canvas> 엘리먼트에 직접 .getImageData()를 호출해
+     "getImageData is not a function" 예외로 렌더를 깨고, (2) 이미지를 비동기로 로드하며 SNAPSHOT_SAVED를
+     내 painter가 file.modified=true(저장 토글)로 만든다. 둘 다 addSVG의 "비동기 이미지 처리" 창에서 일어난다.
+     전역 상시 패치나 1.5초 modified 억제 대신, 이 창 동안만 좁게 손대고 창이 닫히면 원복한다. */
+  var IMPORT_SETTLE_MS = 1200;   // addSVG의 비동기 이미지 스냅샷까지 덮는 창(그 뒤 원복)
+
+  // (1) getImageData 폴리필: 깨진 svg를 실제로 렌더하는 동안만 임시로 심는다. 참조 카운트로 동시 렌더를
+  // 견디고, 원래 없던 메서드면 삭제·있던 값이면 원복한다 → 기능 OFF 시 canvas prototype에 잔재가 없다.
+  var canvasPatchDepth = 0;
+  var canvasPatchSaved = null;
+  function installCanvasGetImageData() {
+    if (canvasPatchDepth++ > 0) return;                    // 이미 설치됨 → 카운트만 증가
+    canvasPatchSaved = [];
+    var protos = [window.HTMLCanvasElement];
+    if (typeof OffscreenCanvas !== 'undefined') protos.push(OffscreenCanvas);
+    for (var i = 0; i < protos.length; i++) {
+      var P = protos[i];
+      if (!P || !P.prototype || typeof P.prototype.getImageData === 'function') continue;  // 이미 있으면 안 건드림
+      var proto = P.prototype;
+      canvasPatchSaved.push({
+        proto: proto,
+        hadOwn: Object.prototype.hasOwnProperty.call(proto, 'getImageData'),
+        original: proto.getImageData
+      });
+      proto.getImageData = function () {
+        var ctx = this.getContext && this.getContext('2d');
+        return ctx ? ctx.getImageData.apply(ctx, arguments) : null;
+      };
+    }
+  }
+  function uninstallCanvasGetImageData() {
+    if (canvasPatchDepth <= 0) return;
+    if (--canvasPatchDepth > 0) return;                    // 다른 렌더가 아직 사용 중 → 유지
+    var saved = canvasPatchSaved; canvasPatchSaved = null;
+    if (!saved) return;
+    for (var i = 0; i < saved.length; i++) {
+      var s = saved[i];
+      try {
+        if (s.hadOwn) s.proto.getImageData = s.original;   // 원래 값 원복
+        else delete s.proto.getImageData;                  // 우리가 만든 것 → 삭제(순정 복귀)
+      } catch (e) {}
+    }
+  }
+
+  // (2) 저장 토글 억제: addSVG의 스냅샷을 Entry 원본 addPicture와 똑같이 isImport=true("자동 import")로 표시해
+  // 수정됨으로 세지 않는다. painter가 스냅샷마다 isImport를 false로 리셋하므로(비동기 이미지 스냅샷 대비),
+  // 우리 렌더 창(suppressImportUntil) 동안에만 SNAPSHOT_SAVED에서 다시 켜 준다. 다른 모양으로 넘어가면 즉시
+  // 창을 닫아 그 모양의 사용자 편집(수정됨)은 절대 건드리지 않는다. 리스너는 ep당 1번만(멱등), OFF면 no-op.
+  var suppressImportUntil = 0;
+  var suppressPictureId = null;
+  var hookedEntryPaint = null;
+  function installImportSuppressor(pt, ep) {
+    if (!ep || hookedEntryPaint === ep || typeof ep.on !== 'function') return;
+    hookedEntryPaint = ep;
+    ep.on('SNAPSHOT_SAVED', function () {
+      if (!enabled || Date.now() >= suppressImportUntil) return;         // 창 밖 → 순정 동작(사용자 편집 그대로)
+      var cur = curObj();
+      if (!cur || !cur.selectedPicture || cur.selectedPicture.id !== suppressPictureId) {
+        suppressImportUntil = 0;                                         // 다른 모양으로 넘어감 → 창 즉시 닫음
+        return;
+      }
+      try { pt.isImport = true; } catch (e) {}                          // 다음(비동기 이미지) 스냅샷도 import로 처리
+    });
+  }
+
   // 고친 svg를 편집창에 직접 그린다. 네이티브 로드(실패)가 끝나도록 잠깐 기다린 뒤 reset + addSVG 1회.
-  // addSVG는 "수정됨"을 켜므로(저장 토글), 렌더 후 잠깐 modified를 false로 눌러둔다(아래 인터벌 참고).
+  // addSVG의 부작용(저장 토글·getImageData 예외)은 위 유틸로 "그 순간에만" 억제한다(isImport + 임시 폴리필).
   function renderFixedSvg(p, fixedSvg) {
     var pg = getPlayground();
     var pt = pg && pg.painter;
@@ -829,18 +883,19 @@
       setTimeout(function () {
         try { ep.reset(); } catch (e) {}
         setTimeout(function () {
+          // 자동 렌더(addSVG)의 스냅샷을 Entry 원본 addPicture와 동일하게 isImport로 "저장 토글 없이" 처리하고,
+          // 비동기 이미지 처리 창 동안만 getImageData 폴리필을 심는다(창이 닫히면 둘 다 원복). 반복 modified=false 제거.
+          installImportSuppressor(pt, ep);
+          suppressPictureId = p.id;
+          suppressImportUntil = Date.now() + IMPORT_SETTLE_MS;
+          try { pt.isImport = true; } catch (e) {}         // addSVG의 첫(동기) 스냅샷 커버
+          installCanvasGetImageData();
           try { ep.addSVG(fixedSvg); } catch (e) {}
-          delete renderingFix[p.id];           // reset+addSVG(임계영역) 끝 → 재렌더 허용(탭 재진입 등)
-          // addSVG가 이미지를 비동기 로드하면서 file.modified를 true로 만든다 → "저장 토글"이 뜸. 캡처한 file을
-          // 잠깐(약 1.5초) 반복해서 modified=false로 눌러둔다. 단, 사용자가 다른 모양으로 넘어가면 즉시 멈춰
-          // 새 모양의 전환/표시를 절대 건드리지 않는다(modified만 만지고 isUpdate 등 다른 플래그는 안 건드림).
-          var file = pt.file, n = 0;
-          var iv = setInterval(function () {
-            var cur = curObj();
-            if (!cur || !cur.selectedPicture || cur.selectedPicture.id !== p.id) { clearInterval(iv); return; }  // 전환됨 → 정지
-            try { if (file) file.modified = false; } catch (e) {}
-            if (++n >= 10) clearInterval(iv);
-          }, 150);
+          delete renderingFix[p.id];                        // reset+addSVG(임계영역) 끝 → 재렌더 허용(탭 재진입 등)
+          setTimeout(function () {
+            if (suppressPictureId === p.id) suppressImportUntil = 0;   // 우리 창 종료(다른 렌더가 새로 열었으면 안 건드림)
+            uninstallCanvasGetImageData();                             // 임시 폴리필 원복(순정 복귀)
+          }, IMPORT_SETTLE_MS);
         }, 100);
       }, switched ? 180 : 0);
     }, 300);
