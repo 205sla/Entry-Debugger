@@ -905,16 +905,20 @@
     if (!ep) return;
     if (renderingFix[p.id]) return;            // 이미 이 모양 렌더 중 → 중복 방지
     renderingFix[p.id] = true;
-    setTimeout(function () {
+    // 지연 "단계마다" 재확인: 기능이 OFF됐거나 다른 모양으로 넘어갔으면 그 즉시 중단한다 —
+    // 순정 편집기(reset)·canvas prototype(폴리필)·다른 모양의 편집 세션(addSVG 오염)을 일절 건드리지 않는다.
+    function aborted() {
       var o = curObj();
-      // 지연 중 기능이 OFF됐거나 다른 모양으로 넘어가면 즉시 중단(편집기·prototype 손대지 않음).
-      if (!enabled || !o || !o.selectedPicture || o.selectedPicture.id !== p.id) { delete renderingFix[p.id]; return; }
+      return !enabled || !o || !o.selectedPicture || o.selectedPicture.id !== p.id;
+    }
+    setTimeout(function () {
+      if (aborted()) { delete renderingFix[p.id]; return; }
       var switched = ensureVectorMode(ep);     // 벡터 모양 → 비트맵 모드면 벡터로 전환(안 하면 비트맵으로 남아 잘못 저장됨)
       setTimeout(function () {
-        if (!enabled) { delete renderingFix[p.id]; return; }   // 전환 대기 중 OFF → 편집기 reset도 하지 않음
+        if (aborted()) { delete renderingFix[p.id]; return; }   // 전환 대기 중 OFF·모양 전환 → 편집기 reset도 하지 않음
         try { ep.reset(); } catch (e) {}
         setTimeout(function () {
-          if (!enabled) { delete renderingFix[p.id]; return; } // 최종 지연 중 OFF → 폴리필·addSVG 자체를 하지 않음(OFF=순정)
+          if (aborted()) { delete renderingFix[p.id]; return; } // 최종 지연 중 OFF·모양 전환 → 폴리필·addSVG 자체를 하지 않음
           // 자동 렌더(addSVG)의 스냅샷을 Entry 원본 addPicture와 동일하게 isImport로 "저장 토글 없이" 처리하고,
           // 비동기 이미지 처리 창 동안만 getImageData 폴리필을 심는다(창이 닫히면 둘 다 원복). 반복 modified=false 제거.
           installImportSuppressor(pt, ep);
@@ -926,7 +930,11 @@
           try { ep.addSVG(fixedSvg); } catch (e) {}
           delete renderingFix[p.id];                        // reset+addSVG(임계영역) 끝 → 재렌더 허용(탭 재진입 등)
           setTimeout(function () {
-            if (suppressPictureId === p.id) closeImportWindow();       // 우리 창 종료+isImport 프라임 해제(다른 렌더면 안 건드림)
+            // 우리 창일 때만 닫되, 이미 "다른 모양"이 선택돼 있으면 건너뛴다 — 그 모양의 네이티브 import
+            // (addPicture가 켠 isImport)가 진행 중일 수 있고, 우리 창은 전환 시점(onDown/스냅샷 리스너)에 이미 닫혔다.
+            var oc = curObj();
+            var onOther = oc && oc.selectedPicture && oc.selectedPicture.id !== p.id;
+            if (suppressPictureId === p.id && !onOther) closeImportWindow();  // 우리 창 종료+isImport 프라임 해제
             uninstallCanvasGetImageData();                             // 임시 폴리필 원복(순정 복귀)
           }, IMPORT_SETTLE_MS);
         }, 100);
