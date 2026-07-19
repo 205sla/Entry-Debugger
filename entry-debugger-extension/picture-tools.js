@@ -723,6 +723,225 @@
     requestAnimationFrame(restore);
   }
 
+  /* ─────────────────────────────────────────────
+     "벡터 버그" 모양 자동 수리
+     일부 벡터 모양은 저장된 svg가 깨져(예: <image>가 ns1:href를 쓰는데 root에 xmlns:ns1 선언이 없어
+     XML 파싱 실패) Entry 벡터 편집기(paper.js)가 조용히 못 그린다 → 모양을 클릭해도 직전 모양이
+     편집창에 남고, 그대로 저장하면 직전 그림이 그 모양에 덮어써진다. 대응: 모양을 클릭(또는 모양 탭
+     진입)하면 svg를 받아 DOMParser로 깨졌는지 확인하고, 깨졌으면 네임스페이스를 보강해 고친 뒤
+     벡터 모드에서 addSVG로 직접 그린다. 정상 svg는 네이티브가 그리므로 건드리지 않는다.
+     ───────────────────────────────────────────── */
+  var imageSvgCache = {};   // picture.id -> 'ok'(정상,네이티브가 그림) | 'fixed'(깨진 svg,우리가 수리) | 'pending'
+  var imageSvgData = {};    // picture.id -> 고친 svg 문자열(깨진 모양만 캐시)
+  var renderingFix = {};    // picture.id -> true (동시 중복 렌더 방지)
+
+  // 깨졌는지 확인할 svg의 URL. Entry 원본 Painter.getImageSrc처럼 picture.fileurl(엔트리가 아는 완성 주소)이
+  // 있으면 무조건 그대로 쓴다 — 서명 URL·프록시·CDN·미디어 엔드포인트처럼 .svg로 안 끝나는 주소도 포함. 없을
+  // 때만 Entry.defaultPath(getImageSrc와 동일 기준) 기준으로 조립하고, location.origin은 최후 폴백으로만 둔다.
+  // (fileurl이 svg가 아니어도 아래 fetch+DOMParser가 파싱 실패로 '네이티브에 맡김' 처리하므로 안전.)
+  function pictureSvgUrl(p) {
+    if (!p) return null;
+    if (p.fileurl) return p.fileurl;                                     // 엔트리가 준 주소 그대로(무조건 우선)
+    var f = p.filename;
+    if (!f || f.length < 4) return null;
+    var entry = safeGetEntry();
+    var base = (entry && entry.defaultPath) || location.origin;          // Painter.getImageSrc와 동일 기준
+    return base + '/uploads/' + f.substring(0, 2) + '/' + f.substring(2, 4) + '/image/' + f + '.svg';
+  }
+
+  // 편집창을 벡터 모드로 전환한다(벡터/비트맵 토글의 '벡터' 클릭). 깨진 svg(벡터 모양)를 비트맵 모드에서
+  // 클릭하면 모드가 비트맵으로 남아 잘못 저장될 수 있으므로 addSVG 전에 벡터 모드를 보장한다. 이미 벡터면 안 누름.
+  // ('벡터' 클릭=bitmap→vector는 가벼움. '비트맵' 클릭=vector→bitmap은 래스터화라 무거워 프리즈 → 절대 안 누름.)
+  function ensureVectorMode(ep) {
+    try {
+      if (ep && ep.mode === 'VECTOR') return false;     // 이미 벡터 → 안 건드림
+      var els = document.querySelectorAll('span.label');
+      for (var i = 0; i < els.length; i++) {
+        if ((els[i].textContent || '').replace(/\s/g, '') === '벡터') {
+          (els[i].closest('.right') || els[i]).click();
+          return true;                                   // 전환 클릭함
+        }
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  // 클릭한 모양 svg에 <image>가 있으면(가짜/혼합 벡터) 그 이미지들을 편집창에 다시 그린다. svg를 비동기로 받아 캐시.
+  // 클릭한 모양 svg가 "깨진 벡터"(예: <image>가 ns1:href를 쓰는데 root에 xmlns:ns1 선언이 없어
+  // XML 파싱 실패 → 네이티브 paper가 조용히 못 그리고 직전 모양이 남음)면, 받아서 고친 뒤 addSVG로
+  // 직접 그린다. 정상 svg는 네이티브가 알아서 그리므로 건드리지 않는다(깨진 것만 1회 처리 → 루프 없음).
+  function maybeRepairImageSvg(p) {
+    if (!enabled || !p) return;
+    var t = p.imageType;
+    if (t !== 'svg' && t !== 'vector') return;        // png 등은 대상 아님
+    var c = imageSvgCache[p.id];
+    if (c === 'ok' || c === 'pending') return;        // 정상(네이티브가 그림) 또는 확인 중 → 패스
+    if (c === 'fixed' && imageSvgData[p.id]) { renderFixedSvg(p, imageSvgData[p.id]); return; }
+    var url = pictureSvgUrl(p);
+    if (!url || typeof fetch !== 'function') return;
+    imageSvgCache[p.id] = 'pending';
+    fetch(url).then(function (r) { return r.ok ? r.text() : ''; }).then(function (svg) {
+      if (!svg) { delete imageSvgCache[p.id]; return; } // 못 받으면 다음 클릭에 재시도
+      // "깨짐"은 XML 파싱 실패 여부로 정확히 판정한다. (#1 걷기1: 2번째 <image>의 ns1:href가 미선언이라
+      // parsererror → 네이티브가 못 그림. #4 img033: ns1을 써도 인라인 선언이 있어 파싱 OK → 네이티브가 그림.
+      // 문자열 휴리스틱은 둘 다 깨진 걸로 오판해 정상 모양까지 다시 그렸음.)
+      if (!svgHasParseError(svg)) { imageSvgCache[p.id] = 'ok'; return; }   // 정상 → 네이티브가 그림, 손 안 댐
+      var fixed = svg;
+      if (svg.indexOf('ns1:href') >= 0 && !/<svg\b[^>]*xmlns:ns1=/.test(svg)) {
+        fixed = svg.replace('<svg ', '<svg xmlns:ns1="http://www.w3.org/1999/xlink" ');
+      }
+      if (svgHasParseError(fixed)) { imageSvgCache[p.id] = 'ok'; return; }  // 우리가 못 고침 → 네이티브에 맡김(루프 방지)
+      imageSvgCache[p.id] = 'fixed'; imageSvgData[p.id] = fixed;
+      renderFixedSvg(p, fixed);
+    }).catch(function () { delete imageSvgCache[p.id]; });
+  }
+
+  // svg 문자열이 XML 파싱 에러를 내는지(=네이티브 paper가 조용히 못 그리는 깨진 svg인지) 판정.
+  function svgHasParseError(svg) {
+    try { return !!new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('parsererror'); }
+    catch (e) { return false; }
+  }
+
+  /* ─── entry-paint 자동 렌더의 부작용을 "그 순간에만" 억제하는 유틸 ───
+     addSVG는 (1) 임베드 이미지를 래스터화할 때 <canvas> 엘리먼트에 직접 .getImageData()를 호출해
+     "getImageData is not a function" 예외로 렌더를 깨고, (2) 이미지를 비동기로 로드하며 SNAPSHOT_SAVED를
+     내 painter가 file.modified=true(저장 토글)로 만든다. 둘 다 addSVG의 "비동기 이미지 처리" 창에서 일어난다.
+     전역 상시 패치나 1.5초 modified 억제 대신, 이 창 동안만 좁게 손대고 창이 닫히면 원복한다. */
+  var IMPORT_SETTLE_MS = 1200;   // addSVG의 비동기 이미지 스냅샷까지 덮는 창(그 뒤 원복)
+
+  // (1) getImageData 폴리필: 깨진 svg를 실제로 렌더하는 동안만 임시로 심는다. 참조 카운트로 동시 렌더를
+  // 견디고, 원래 없던 메서드면 삭제·있던 값이면 원복한다 → 기능 OFF 시 canvas prototype에 잔재가 없다.
+  var canvasPatchDepth = 0;
+  var canvasPatchSaved = null;
+  function installCanvasGetImageData() {
+    if (canvasPatchDepth++ > 0) return;                    // 이미 설치됨 → 카운트만 증가
+    canvasPatchSaved = [];
+    var protos = [window.HTMLCanvasElement];
+    if (typeof OffscreenCanvas !== 'undefined') protos.push(OffscreenCanvas);
+    for (var i = 0; i < protos.length; i++) {
+      var P = protos[i];
+      if (!P || !P.prototype || typeof P.prototype.getImageData === 'function') continue;  // 이미 있으면 안 건드림
+      var proto = P.prototype;
+      canvasPatchSaved.push({ proto: proto, descriptor: Object.getOwnPropertyDescriptor(proto, 'getImageData') });
+      proto.getImageData = function () {
+        var ctx = this.getContext && this.getContext('2d');
+        return ctx ? ctx.getImageData.apply(ctx, arguments) : null;
+      };
+    }
+  }
+  function uninstallCanvasGetImageData() {
+    if (canvasPatchDepth <= 0) return;
+    if (--canvasPatchDepth > 0) return;                    // 다른 렌더가 아직 사용 중 → 유지
+    var saved = canvasPatchSaved; canvasPatchSaved = null;
+    if (!saved) return;
+    for (var i = 0; i < saved.length; i++) {
+      var s = saved[i];
+      try {
+        if (s.descriptor) Object.defineProperty(s.proto, 'getImageData', s.descriptor);  // 원래 디스크립터 복원
+        else delete s.proto.getImageData;                                                // 우리가 만든 것 → 삭제(순정)
+      } catch (e) {}
+    }
+  }
+  // 기능 OFF 등으로 즉시 순정이 필요할 때: 진행 중이던 수리의 부작용(임시 폴리필·저장 토글 억제 창)을 강제 정리한다.
+  // 예약된 uninstall 타이머가 남아도 depth를 1로 맞춰 1회만 원복 → 이후 타이머는 depth<=0이라 no-op(이중 원복 방지).
+  function forceCleanupRepairSideEffects() {
+    closeImportWindow();                                  // 저장 토글 억제 창 + isImport 프라임 해제
+    if (canvasPatchDepth > 0) { canvasPatchDepth = 1; uninstallCanvasGetImageData(); }
+  }
+
+  // (2) 저장 토글 억제: addSVG의 스냅샷을 Entry 원본 addPicture와 똑같이 isImport=true("자동 import")로 표시해
+  // 수정됨으로 세지 않는다. painter가 스냅샷마다 isImport를 false로 리셋하므로(비동기 이미지 스냅샷 대비),
+  // 우리 렌더 창(suppressImportUntil) 동안에만 SNAPSHOT_SAVED에서 다시 켜 준다. 다른 모양으로 넘어가면 즉시
+  // 창을 닫아 그 모양의 사용자 편집(수정됨)은 절대 건드리지 않는다. 리스너는 ep당 1번만(멱등), OFF면 no-op.
+  var suppressImportUntil = 0;
+  var suppressPictureId = null;
+  var hookedEntryPaint = null;
+  // 저장 토글 억제 창을 닫는다: 시간창(suppressImportUntil)을 끄고, 스냅샷 리스너가 "다음 import"용으로 켜 둔
+  // painter.isImport 프라임도 false로 되돌린다. 이 프라임을 남기면 창이 닫힌 뒤 첫 사용자 편집이 import로 오인돼
+  // 유실될 수 있다(스냅샷 이벤트가 아닌 경로 — 사용자 입력/타임아웃/OFF — 로 창을 닫을 때 반드시 함께 호출).
+  function closeImportWindow() {
+    suppressImportUntil = 0;
+    var pg = getPlayground();
+    var ptx = pg && pg.painter;
+    if (ptx) { try { ptx.isImport = false; } catch (e) {} }
+  }
+  function installImportSuppressor(pt, ep) {
+    if (!ep || hookedEntryPaint === ep || typeof ep.on !== 'function') return;
+    hookedEntryPaint = ep;
+    ep.on('SNAPSHOT_SAVED', function () {
+      if (!enabled || Date.now() >= suppressImportUntil) return;         // 창 밖 → 순정 동작(사용자 편집 그대로)
+      var cur = curObj();
+      if (!cur || !cur.selectedPicture || cur.selectedPicture.id !== suppressPictureId) {
+        suppressImportUntil = 0;                                         // 다른 모양으로 넘어감 → 창 즉시 닫음
+        return;
+      }
+      try { pt.isImport = true; } catch (e) {}                          // 다음(비동기 이미지) 스냅샷도 import로 처리
+    });
+  }
+
+  // 자동 import 창을 "첫 사용자 입력"에 즉시 닫는다. 자동 import(addSVG)는 포인터 입력이 없으므로, 사용자가
+  // 그 모양을 실제로 그리기 시작하면(pointerdown/mousedown) 창이 닫혀 그 편집의 스냅샷은 억제 밖 → 수정됨이
+  // 정상 기록된다. 즉 시간이 아니라 "실제 사용자 편집 시작"을 경계로 삼아, 자동 import만 억제한다.
+  function closeImportWindowOnUserInput() {
+    function onDown() {
+      closeImportWindow();                         // 창 닫고 isImport 프라임 해제 → 이 편집은 수정됨으로 기록됨
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('mousedown', onDown, true);
+    }
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('mousedown', onDown, true);
+    setTimeout(function () {                        // 시간으로 창이 닫혔으면 리스너도 정리(잔재 없음)
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('mousedown', onDown, true);
+    }, IMPORT_SETTLE_MS);
+  }
+
+  // 고친 svg를 편집창에 직접 그린다. 네이티브 로드(실패)가 끝나도록 잠깐 기다린 뒤 reset + addSVG 1회.
+  // addSVG의 부작용(저장 토글·getImageData 예외)은 위 유틸로 "그 순간에만" 억제한다(isImport + 임시 폴리필).
+  function renderFixedSvg(p, fixedSvg) {
+    var pg = getPlayground();
+    var pt = pg && pg.painter;
+    var ep = pt && pt.entryPaint;
+    if (!ep) return;
+    if (renderingFix[p.id]) return;            // 이미 이 모양 렌더 중 → 중복 방지
+    renderingFix[p.id] = true;
+    // 지연 "단계마다" 재확인: 기능이 OFF됐거나 다른 모양으로 넘어갔으면 그 즉시 중단한다 —
+    // 순정 편집기(reset)·canvas prototype(폴리필)·다른 모양의 편집 세션(addSVG 오염)을 일절 건드리지 않는다.
+    function aborted() {
+      var o = curObj();
+      return !enabled || !o || !o.selectedPicture || o.selectedPicture.id !== p.id;
+    }
+    setTimeout(function () {
+      if (aborted()) { delete renderingFix[p.id]; return; }
+      var switched = ensureVectorMode(ep);     // 벡터 모양 → 비트맵 모드면 벡터로 전환(안 하면 비트맵으로 남아 잘못 저장됨)
+      setTimeout(function () {
+        if (aborted()) { delete renderingFix[p.id]; return; }   // 전환 대기 중 OFF·모양 전환 → 편집기 reset도 하지 않음
+        try { ep.reset(); } catch (e) {}
+        setTimeout(function () {
+          if (aborted()) { delete renderingFix[p.id]; return; } // 최종 지연 중 OFF·모양 전환 → 폴리필·addSVG 자체를 하지 않음
+          // 자동 렌더(addSVG)의 스냅샷을 Entry 원본 addPicture와 동일하게 isImport로 "저장 토글 없이" 처리하고,
+          // 비동기 이미지 처리 창 동안만 getImageData 폴리필을 심는다(창이 닫히면 둘 다 원복). 반복 modified=false 제거.
+          installImportSuppressor(pt, ep);
+          suppressPictureId = p.id;
+          suppressImportUntil = Date.now() + IMPORT_SETTLE_MS;
+          closeImportWindowOnUserInput();                  // 사용자가 이 모양을 실제 편집하기 시작하면 창 즉시 종료
+          try { pt.isImport = true; } catch (e) {}         // addSVG의 첫(동기) 스냅샷 커버
+          installCanvasGetImageData();
+          try { ep.addSVG(fixedSvg); } catch (e) {}
+          delete renderingFix[p.id];                        // reset+addSVG(임계영역) 끝 → 재렌더 허용(탭 재진입 등)
+          setTimeout(function () {
+            // 우리 창일 때만 닫되, 이미 "다른 모양"이 선택돼 있으면 건너뛴다 — 그 모양의 네이티브 import
+            // (addPicture가 켠 isImport)가 진행 중일 수 있고, 우리 창은 전환 시점(onDown/스냅샷 리스너)에 이미 닫혔다.
+            var oc = curObj();
+            var onOther = oc && oc.selectedPicture && oc.selectedPicture.id !== p.id;
+            if (suppressPictureId === p.id && !onOther) closeImportWindow();  // 우리 창 종료+isImport 프라임 해제
+            uninstallCanvasGetImageData();                             // 임시 폴리필 원복(순정 복귀)
+          }, IMPORT_SETTLE_MS);
+        }, 100);
+      }, switched ? 180 : 0);
+    }, 300);
+  }
+
   // The custom scrollbar is pointer-events:none (decoration); a click on it leaks to the
   // row behind and is mistaken for a drag. Right-edge mousedown -> proportional scroll.
   function inScrollbarZone(clientX) {
@@ -1058,7 +1277,7 @@
       dragging = false;
       if (!dragStarted) { // not a drag -> collapse to single
         var o = curObj(), p = o && o.pictures[idx];
-        if (p) { selFromIds([p.id]); anchorIdx = idx; applyHighlight(); try { if (pg) pg.selectPicture(p); } catch (err) {} }
+        if (p) { selFromIds([p.id]); anchorIdx = idx; applyHighlight(); try { if (pg) pg.selectPicture(p); } catch (err) {} maybeRepairImageSvg(p); }
         return;
       }
       if (dropMode === 'object' && dropObj) copyPicturesTo(dropObj);
@@ -1757,6 +1976,25 @@
     });
   }
 
+  // 모양 탭으로 들어올 때(changeViewMode('picture')) 네이티브는 changePicture를 안 부르고 실패한 화면을
+  // 그대로 둔다(로그로 확인). 그래서 여기서 현재 선택 모양을 다시 수리한다(탭 진입 시 깨진 모양 렌더).
+  function patchPainterForVectorFix() {
+    var pg = getPlayground();
+    if (!pg || typeof pg.changeViewMode !== 'function') return false;
+    return patchMethod(pg, 'changeViewMode', PATCH_ID, function (orig) {
+      return function (mode) {
+        var ret = orig.apply(this, arguments);
+        if (enabled && mode === 'picture') {
+          try {
+            var o = getCurrentObject();
+            if (o && o.selectedPicture) maybeRepairImageSvg(o.selectedPicture);
+          } catch (e) {}
+        }
+        return ret;
+      };
+    });
+  }
+
   function applyEntry() {
     var entry = safeGetEntry();
     if (!entry || !entry.playground || !document.body) return false;
@@ -1765,6 +2003,7 @@
     patchContextMenu();
     patchUndoRedoScroll();
     patchIncrementalInject();
+    patchPainterForVectorFix();
     return true;
   }
 
@@ -1796,6 +2035,7 @@
       stopObserver();
       cancelUploadWork();
       clearSelAndHighlight();
+      forceCleanupRepairSideEffects();   // 진행 중이던 벡터 수리의 임시 폴리필·저장 토글 억제 창을 즉시 정리(OFF=순정)
     }
     post('PICTURE_TOOLS_RESULT', { success: true, enabled: enabled }, msg.requestId);
   });

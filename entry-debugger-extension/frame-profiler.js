@@ -213,27 +213,67 @@
 
   /* ───────── 클릭 → 실제 코드로 점프+하이라이트 ───────── */
   // (function-usage-inspector.js 의 focusBlockWhenReady 패턴)
+  // 점프(오브젝트 선택/블록 활성화)가 실행·일시정지를 "정지"로 바꾸지 않도록, 점프하는 "그 구간에만"
+  // engine.stop / toggleStop 을 무력화한다. 여러 점프가 겹칠 수 있으므로 참조 카운트로 관리한다 — 각 점프가
+  // 시작 시 acquire, 완료(또는 안전망 폴백)에서 정확히 1번 release, 마지막 점프가 끝나야 실제 원복. focusBlock이
+  // 블록을 activateBlock 하는 즉시 그 점프를 release하므로, 점프가 빨리 끝나면 수동 정지도 그만큼 빨리 되살아난다.
+  var stopGuardDepth = 0;
+  var stopGuardEng = null, stopGuardRealStop = null, stopGuardRealToggle = null;
+  function acquireStopSuppression(eng) {
+    if (!eng) return null;
+    if (stopGuardDepth === 0) {                       // 첫 점프만 실제 무력화 설치(겹친 점프는 원본 캡처 공유)
+      stopGuardEng = eng;
+      stopGuardRealStop = eng.stop;
+      stopGuardRealToggle = eng.toggleStop;
+      if (typeof eng.stop === 'function') eng.stop = function () {};
+      if (typeof eng.toggleStop === 'function') eng.toggleStop = function () {};
+    }
+    stopGuardDepth++;
+    var released = false;
+    function release() {
+      if (released) return;                          // 이 점프는 정확히 1번만 release
+      released = true;
+      if (--stopGuardDepth > 0) return;              // 다른 점프가 아직 진행 중 → 무력화 유지
+      if (stopGuardEng) {
+        if (typeof stopGuardRealStop === 'function' && stopGuardEng.stop !== stopGuardRealStop) stopGuardEng.stop = stopGuardRealStop;
+        if (typeof stopGuardRealToggle === 'function' && stopGuardEng.toggleStop !== stopGuardRealToggle) stopGuardEng.toggleStop = stopGuardRealToggle;
+      }
+      stopGuardEng = null; stopGuardRealStop = null; stopGuardRealToggle = null;
+    }
+    setTimeout(release, 1600);                        // 안전망: 이 점프가 끝내 완료 안 돼도 반드시 release
+    return release;
+  }
   function jumpToCode(objId, hatId) {
     var E = safeGetEntry();
     if (!E || !E.container) return;
-    try { if (typeof E.container.selectObject === 'function') E.container.selectObject(objId); } catch (e) {}
-    focusBlock(objId, hatId, 0);
+    // 실행/일시정지 중이면 점프 때문에 작품이 멈추지 않도록 이 점프 구간의 정지를 막는다(점프별 release 토큰).
+    var eng = E.engine;
+    var release = null;
+    if (eng && typeof eng.isState === 'function' && (eng.isState('pause') || eng.isState('run'))) {
+      release = acquireStopSuppression(eng);
+    }
+    // 이미 그 오브젝트가 선택돼 있으면 selectObject 호출 자체를 건너뛴다(정지 트리거 회피).
+    var cur = E.playground && E.playground.object;
+    if ((!cur || cur.id !== objId) && typeof E.container.selectObject === 'function') {
+      try { E.container.selectObject(objId); } catch (e) {}
+    }
+    focusBlock(objId, hatId, 0, release);
   }
-  function focusBlock(objId, hatId, attempt) {
+  function focusBlock(objId, hatId, attempt, release) {
     var E = safeGetEntry();
     var obj = E && E.container && typeof E.container.getObject === 'function' ? E.container.getObject(objId) : null;
     var block = obj && obj.script && typeof obj.script.findById === 'function' ? obj.script.findById(hatId) : null;
     var view = block && block.view;
     var board = view && typeof view.getBoard === 'function' ? view.getBoard() : null;
     if (block && view && board) {
-      try {
-        if (typeof board.activateBlock === 'function') board.activateBlock(block);
-        if (typeof board.setSelectedBlock === 'function') board.setSelectedBlock(view);
-      } catch (e) {}
+      // activateBlock = 해당 블록으로 스크롤 + 하이라이트(이동용). setSelectedBlock("편집 선택")은
+      // 선택 이벤트가 실행 중 편집으로 간주돼 정지를 유발하므로 쓰지 않는다.
+      try { if (typeof board.activateBlock === 'function') board.activateBlock(block); } catch (e) {}
+      if (release) release();   // 이 점프 완료 → 정지 무력화 해제(마지막 점프면 실제 원복)
       return;
     }
-    if (attempt >= 12) return;
-    setTimeout(function () { focusBlock(objId, hatId, attempt + 1); }, 120);
+    if (attempt >= 12) { if (release) release(); return; }   // 포기 → 해제
+    setTimeout(function () { focusBlock(objId, hatId, attempt + 1, release); }, 120);
   }
 
   /* ───────── 프레임 루프: EMA 누적 ───────── */
@@ -268,29 +308,34 @@
   function frameLoop() {
     rafId = 0;
     if (!enabled) return;
-    var E = safeGetEntry();
-    var eng = E && E.engine;
-    var isRun = !!(eng && typeof eng.isState === 'function' && eng.isState('run'));
-    var isPause = !!(eng && typeof eng.isState === 'function' && eng.isState('pause'));
-    active = enabled && isRun;
+    // 어떤 프레임에서 예외가 나도 맨 아래 rAF 재예약까지는 반드시 도달하도록 try로 감싼다.
+    // 감싸지 않으면 예외 한 번에 루프가 영구 정지 → 이후 작품을 실행해도 오버레이가 안 뜨고,
+    // 토글 off/on(startLoop 재호출)으로만 되살아나던 "가끔 안 켜짐" 문제가 있었다.
+    try {
+      var E = safeGetEntry();
+      var eng = E && E.engine;
+      var isRun = !!(eng && typeof eng.isState === 'function' && eng.isState('run'));
+      var isPause = !!(eng && typeof eng.isState === 'function' && eng.isState('pause'));
+      active = enabled && isRun;
 
-    if (isRun) {
-      running = true; paused = false;
-      var t = now();
-      if (lastFrameAt) { var d = t - lastFrameAt; if (d > 0) fps = fps ? (fps * 0.9 + (1000 / d) * 0.1) : (1000 / d); }
-      lastFrameAt = t;
-      flushFrame();
-      if (t - lastOverlayAt >= OVERLAY_MS) { lastOverlayAt = t; updateOverlay(); }
-    } else if (isPause && running) {
-      // 일시정지 → 마지막 상태 그대로 고정 (측정/EMA감쇠 멈춤, 오버레이 유지)
-      lastFrameAt = 0;
-      if (!paused) { paused = true; updateOverlay(); }
-    } else if (running) {
-      // 정지 → 오버레이 제거 + 데이터 비움
-      running = false; paused = false; lastFrameAt = 0;
-      resetData();
-      removeOverlay();
-    }
+      if (isRun) {
+        running = true; paused = false;
+        var t = now();
+        if (lastFrameAt) { var d = t - lastFrameAt; if (d > 0) fps = fps ? (fps * 0.9 + (1000 / d) * 0.1) : (1000 / d); }
+        lastFrameAt = t;
+        flushFrame();
+        if (t - lastOverlayAt >= OVERLAY_MS) { lastOverlayAt = t; updateOverlay(); }
+      } else if (isPause && running) {
+        // 일시정지 → 마지막 상태 그대로 고정 (측정/EMA감쇠 멈춤, 오버레이 유지)
+        lastFrameAt = 0;
+        if (!paused) { paused = true; updateOverlay(); }
+      } else if (running) {
+        // 정지 → 오버레이 제거 + 데이터 비움
+        running = false; paused = false; lastFrameAt = 0;
+        resetData();
+        removeOverlay();
+      }
+    } catch (e) {}
     rafId = window.requestAnimationFrame(frameLoop);
   }
   function startLoop() { if (!rafId) { lastFrameAt = 0; rafId = window.requestAnimationFrame(frameLoop); } }
@@ -314,7 +359,8 @@
   }
 
   function ensureOverlay() {
-    if (ov) return ov;
+    if (ov && ov.isConnected) return ov;
+    if (ov) removeOverlay();             // DOM에서 분리된 잔여 오버레이는 정리하고 새로 만든다
     ov = document.createElement('div');
     ov.id = 'ed-frame-profiler';
     ov.style.cssText = [
