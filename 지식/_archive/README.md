@@ -7,6 +7,7 @@
 - `chrome-web-store-release-2.4.0.md`
 - `picture-tools-review-and-release-2.5.0.md` · `picture-tools-review-prompt-2.5.0.md`
 - `chrome-web-store-release-2.6.1.md`
+- `chrome-web-store-release-2.6.2.md`
 - `entry-debugger-refactor-review-prompt-2.6.1.md`
 - `block-editing-fixes-review-prompt.md` (if_else 복사·Alt 단일 드래그 수정 검토)
 

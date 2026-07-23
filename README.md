@@ -4,7 +4,7 @@
 실시간으로 모니터링하고 직접 제어할 수 있는 크롬 확장프로그램입니다.
 
 - **대상 페이지**: `https://playentry.org/ws/*` (작품 편집기 화면)
-- **버전**: 2.6.1
+- **버전**: 2.6.2
 
 ## 설치
 
@@ -19,6 +19,7 @@
 npm run check
 npm run build:dev
 npm run smoke:local
+npm run smoke:block-text-copy
 npm run smoke:picture-tools
 ```
 
@@ -26,6 +27,8 @@ npm run smoke:picture-tools
   page-core 주입 순서, 함수 템플릿 ID 재매핑을 확인합니다.
 - `npm run build:dev`: 로컬 Entry 서버에서도 동작하는 개발용 확장을 `dist/entry-debugger-extension-dev/`에 생성합니다. Chrome match pattern 제약 때문에 개발용 manifest는 `http://127.0.0.1/*`, `http://localhost/*`를 포함하고, 실제 동작 여부는 content script 내부에서 `/ws/*`로 다시 제한합니다.
 - `npm run smoke:local`: 로컬 Entry 만들기 화면에서 Chromium 기반 확장 주입과 핵심 UI 동작을 확인합니다. PR 생성 또는 PR 브랜치 업데이트 직전에 실행합니다.
+- `npm run smoke:block-text-copy`: 실제 Entry 블록 모델과 Chromium 클립보드를 사용해
+  반복문 안의 `만일~아니면` 텍스트 복사 결과를 확인합니다.
 - `npm run smoke:picture-tools`: 모양 명령·복제·재정렬·이름변경과 10개 업로드 경계, GIF 프레임 합산, 업로드 창 종료 취소를 Chromium에서 검증합니다.
 - 실제 Chrome Web Store 제출용 폴더는 계속 `entry-debugger-extension/`입니다.
 
@@ -56,6 +59,14 @@ npm run smoke:picture-tools
 ### 장면
 - 모든 장면 목록 표시
 - **"이동"** 버튼으로 장면 전환 + 실행 중이면 "장면이 시작되었을 때" 이벤트 자동 발화
+
+## v2.6.2 변경사항
+
+- 반복 블록 안에 중첩된 `만일~아니면`을 텍스트로 복사할 때 `아니면`이
+  조건 머리줄에 붙고 두 분기 본문이 같은 들여쓰기로 출력되던 문제 수정
+- 엔트리 번들에서 줄바꿈 필드의 생성자 이름이 바뀌어도 분기 위치를 판별하도록
+  엔트리 인스턴스와 블록 스키마 기반 판정 추가
+- 중첩 if/else와 일반 단일 statement 블록 복사 회귀 테스트 추가
 
 ## v2.6.1 변경사항
 

@@ -447,7 +447,7 @@
     var parts = [];
     var params = getSchemaParams(block);
     contents.forEach(function (content, contentIndex) {
-      if (!content || isLineBreakContent(content)) return;
+      if (!content || isLineBreakContent(content, params)) return;
       var text = contentToText(content, contentIndex, block, params, inline);
       if (text != null) parts.push(text);
     });
@@ -467,7 +467,7 @@
     var segments = [];
     var parts = [];
     contents.forEach(function (content, contentIndex) {
-      if (content && isLineBreakContent(content)) {
+      if (content && isLineBreakContent(content, params)) {
         segments.push(normalizeVisualText(parts.join(' ')));
         parts = [];
         return;
@@ -522,9 +522,20 @@
     return normalizeText(text) || normalizeText(block.type || '(알 수 없는 블록)');
   }
 
-  function isLineBreakContent(content) {
+  function isLineBreakContent(content, params) {
+    var entry = safeGetEntry();
+    try {
+      if (entry && entry.FieldLineBreak && content instanceof entry.FieldLineBreak) {
+        return true;
+      }
+    } catch (e) {}
+
     var name = content && content.constructor && content.constructor.name;
-    return name === 'FieldLineBreak';
+    if (name === 'FieldLineBreak') return true;
+
+    var paramIndex = getContentParamIndex(content, -1);
+    var paramDef = paramIndex >= 0 && Array.isArray(params) && params[paramIndex];
+    return !!(paramDef && paramDef.type === 'LineBreak');
   }
 
   function isStaticTextContent(content) {
