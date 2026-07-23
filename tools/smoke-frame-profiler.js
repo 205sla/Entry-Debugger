@@ -126,8 +126,7 @@ async function main() {
     }, fixture);
     await page.locator('#ed-frame-profiler .ed-fp-thread').first().dispatchEvent('mousedown');
     await page.waitForFunction(
-      () => window.__edFrameProfilerFocus?.activate > 0 &&
-        window.__edFrameProfilerFocus?.select > 0,
+      () => window.__edFrameProfilerFocus?.activate > 0,
       { timeout: 30000 }
     );
 
@@ -157,11 +156,15 @@ async function main() {
     if (!pausedText.includes('마지막 상태')) {
       throw new Error('일시정지 시 마지막 측정 상태가 유지되지 않았습니다.');
     }
+    const focusResult = await page.evaluate(() => window.__edFrameProfilerFocus);
+    if (focusResult.select !== 0) {
+      throw new Error('코드 점프가 실행 중 편집 선택을 호출했습니다.');
+    }
 
     console.log(JSON.stringify({
       fixture,
       threadResult,
-      focus: await page.evaluate(() => window.__edFrameProfilerFocus),
+      focus: focusResult,
       pausedText,
       stopped: true,
       restartLifecycle: true

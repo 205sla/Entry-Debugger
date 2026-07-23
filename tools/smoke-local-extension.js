@@ -104,7 +104,7 @@ function assertSmokeResult(result) {
     ['boost mode control does not move native coordinate display',
       result.boostWorkspaceResult.position === 'absolute' &&
       result.boostWorkspaceResult.mouseInsideEngine &&
-      result.boostWorkspaceResult.mouseCenterDeltaToEngine <= 2],
+      result.boostWorkspaceResult.maxLayoutShift <= 0.5],
     ['boost mode control moves into fullscreen controls',
       result.boostFullscreenResult.insidePopup &&
       result.boostFullscreenResult.position === 'absolute' &&
@@ -190,17 +190,27 @@ async function main() {
       const mouseInput = engine && engine.querySelector('.entryMouseViewWorkspace_w input');
       const button = document.querySelector('#ed-boost-mode-toggle');
       const engineRect = engine.getBoundingClientRect();
-      const mouseRect = mouseInput.getBoundingClientRect();
+      const visibleRect = mouseInput.getBoundingClientRect();
+      const previousDisplay = button.style.display;
+      button.style.display = 'none';
+      const hiddenRect = mouseInput.getBoundingClientRect();
+      button.style.display = previousDisplay;
+      const restoredRect = mouseInput.getBoundingClientRect();
+      const layoutDeltas = [
+        visibleRect.top - hiddenRect.top,
+        visibleRect.left - hiddenRect.left,
+        visibleRect.width - hiddenRect.width,
+        visibleRect.height - hiddenRect.height,
+        visibleRect.top - restoredRect.top,
+        visibleRect.left - restoredRect.left
+      ].map(Math.abs);
 
       return {
         position: getComputedStyle(button).position,
         mouseInsideEngine:
-          mouseRect.top >= engineRect.top &&
-          mouseRect.bottom <= engineRect.bottom,
-        mouseCenterDeltaToEngine: Math.abs(
-          mouseRect.top + mouseRect.height / 2 -
-          (engineRect.top + engineRect.height / 2)
-        )
+          visibleRect.top >= engineRect.top &&
+          visibleRect.bottom <= engineRect.bottom,
+        maxLayoutShift: Math.max.apply(null, layoutDeltas)
       };
     });
     await page.click('.entryMaximizeButtonWorkspace_w');
