@@ -21,6 +21,7 @@ Entry Debugger 개발 중 확인한 Entry 내부 동작, 확장 프로그램 설
 - [함수 보관함 템플릿 추가 절차](./function-library-template-authoring.md)
 - [Entry Debugger 리팩토링 구조](./entry-debugger-refactor-architecture.md)
 - [Entry Debugger 리팩토링 검토 (기획)](./entry-debugger-refactor-review.md)
+- [Entry Debugger 리팩토링 결정 메모 (2026-08-19)](./entry-debugger-refactor-decision-2026-08-19.md)
 - [Entry Debugger 지원 기능 정리](./entry-debugger-supported-features.md)
 - [부스트/터보 모드 확장 기록](./entry-boost-turbo-mode-extension.md)
 - [개발용 빌드 Windows CRLF 정규화 (해결됨)](./build-dev-extension-windows-crlf.md)
@@ -30,6 +31,17 @@ Entry Debugger 개발 중 확인한 Entry 내부 동작, 확장 프로그램 설
 
 완료된 일회성 문서(옛 릴리스 점검·검토 프롬프트·제거된 기능 기록)는
 [`_archive/`](./_archive/)로 옮겼다. 살아있는 규칙·레퍼런스만 위 목록에 둔다.
+
+## 관련 공통 지식
+
+이 확장이 의존하는 워크스페이스 공통 지식(헌장 §5 상향 포인터).
+
+- [확장 유형 공통 지식](../../지식/README.md) — MV3 content script 함정·pageType·실사이트 E2E
+- [Entry 런타임 접근](../../../_docs/entry-runtime-access.md) — `window.Entry` 위치, 전체화면 engine 교체
+- [Entry 알림 API](../../../_docs/entry-notification-api.md) — `Entry.toast`·모달·팝업(알림 규약의 근거)
+- [만들기 화면 단축키](../../../_docs/entry-workspace-shortcuts.md)
+- [로컬 Entry 테스트](../../../_docs/local-entry-testing/LOCAL_ENTRY_TESTING.md) — 확장 로드·UI 자동화 검증
+- [ENTRY 공용 작업 지침](../../../_docs/entry-shared-workflow-guidelines.md)
 
 ## 관리 규칙
 
