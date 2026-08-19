@@ -14,6 +14,7 @@
   const RETRY_TIMEOUT = 30000;
   const MENU_TEXT = '텍스트로 복사하기';
   const ALL_CODE_MENU_TEXT = '모든 코드 텍스트로 복사하기';
+  const TOAST_TITLE = '블록 텍스트 복사';
   const Bridge = window.EntryDebuggerPageBridge || null;
   const Adapter = window.EntryDebuggerEntryAdapter || null;
   const Patches = window.EntryDebuggerPatchRegistry || null;
@@ -1172,7 +1173,30 @@
     });
   }
 
+  // 이 모듈은 이미 page world에 있으므로 Entry.toast를 직접 호출한다.
+  // BLOCK_TEXT_COPY_TOAST 경로의 최종 수신자는 inject.js인데, inject.js는 디버깅 탭 기능이
+  // 켜져 있을 때만 주입된다. 그래서 디버깅 탭을 끈 채로 새로고침하면 복사는 성공하는데
+  // 알림만 사라졌다. 직접 호출이 불가능할 때만 기존 경로로 넘긴다.
+  function showEntryToast(message, toastType) {
+    var entry = safeGetEntry();
+    var toast = entry && entry.toast;
+
+    if (!toast || typeof toast[toastType] !== 'function') {
+      return false;
+    }
+
+    try {
+      toast[toastType](TOAST_TITLE, message);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function showToast(message, type) {
+    // content.js가 쓰던 매핑을 그대로 유지한다(error → alert, 그 외 → success).
+    if (showEntryToast(message, type === 'error' ? 'alert' : 'success')) return;
+
     post('BLOCK_TEXT_COPY_TOAST', {
       message: message,
       type: type || 'info'

@@ -15,7 +15,7 @@
 | `entry-debugger-extension/inject.js` | `showEntryToast()` → `Entry.toast[type](title, message)` 호출(page world) |
 | `entry-debugger-extension/picture-tools.js` | `nativeToast`/`nativeConfirm`/`prog`/`styledPrompt`/컨텍스트 메뉴 |
 | `entry-debugger-extension/boost-mode.js` | `showEntryToast` → `Entry.toast.warning`(page world) |
-| `entry-debugger-extension/block-text-copy.js` | `BLOCK_TEXT_COPY_TOAST`로 content에 토스트 위임 |
+| `entry-debugger-extension/block-text-copy.js` | `showEntryToast` → `Entry.toast`(page world), 실패 시에만 `BLOCK_TEXT_COPY_TOAST` 위임 |
 | `entryjs-develop/src/class/toast.js` | 엔트리 토스트 원본(`success`/`warning`/`alert`) |
 | `entryjs-develop/src/css/components/toast.less` | 엔트리 토스트 팔레트 SSOT |
 
@@ -42,7 +42,10 @@
 - isolated world(content.js)에서는 `Entry.toast`를 직접 못 부르므로 브리지 경유:
   `showToast(type, title, message)` → `sendToInject('SHOW_ENTRY_TOAST', {type,title,message})`
   → inject.js `showEntryToast()` → `Entry.toast[type](title, message)`.
-- page world 모듈(picture-tools, boost-mode)은 `safeGetEntry().toast`를 직접 호출한다.
+- page world 모듈(picture-tools, boost-mode, block-text-copy)은 `safeGetEntry().toast`를
+  **직접 호출한다**. content 릴레이에 의존하면 안 된다 — `SHOW_ENTRY_TOAST`의 유일한 수신자인
+  `inject.js`는 **디버깅 탭 기능이 켜져 있을 때만** 주입되므로, 디버깅 탭을 끈 채 새로고침하면
+  기능은 동작하는데 알림만 사라진다(2026-08-19 수정 이력 참고).
 - `type`은 `success` | `warning` | `alert` 셋만. inject.js에서 그 외 값은 `success`로 보정.
 - 엔트리 토스트는 `(title, message)` 2줄 렌더이므로 **짧은 제목 + 본문** 형태로 넘긴다.
   예: `showToast('success', '장면 전환', '완료되었습니다.')`.
@@ -88,6 +91,12 @@ GIF 분해·대량 업로드·ZIP 내보내기 진행은 "모양 추가하기" �
 
 ## 이력
 
+- **2026-08-19**: 블록 텍스트 복사 알림이 **디버깅 탭 OFF + 새로고침**에서 사라지던 결함 수정
+  ([결정 메모](./entry-debugger-refactor-decision-2026-08-19.md) D1). 원인은 릴레이 사슬의
+  종점이 `inject.js`인데 그 스크립트가 디버깅 탭 기능에 묶여 주입된다는 점이다. block-text-copy가
+  page world에서 `Entry.toast`를 직접 호출하고, 호출이 불가능할 때만 기존 `BLOCK_TEXT_COPY_TOAST`
+  경로로 넘어가도록 바꿨다. 제목·타입 매핑(`error→alert` / 그 외 `success`)은 그대로다.
+  `tools/check-block-text-copy.js`가 네 경우(토스트 유/무 × 성공/실패)를 고정한다.
 - **2026-06-23**: 디버거 패널 자체 토스트(`.ed-toast`, 패널 안 하단 중앙, 파랑/빨강
   2색)를 **전면 제거**하고 엔트리 네이티브 토스트로 통일. content.js `showToast`
   호출부 13곳을 `(type, title, message)`로 명시, `BLOCK_TEXT_COPY_TOAST` 릴레이는
