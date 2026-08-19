@@ -1,5 +1,7 @@
 {
+  "private": true,
   "scripts": {
+    "lint": "eslint .",
     "check": "node tools/check-extension.js && node tools/check-settings.js && node tools/check-page-core-loader.js && node tools/check-function-library.js && node tools/check-block-text-copy.js",
     "build:dev": "node tools/build-dev-extension.js",
     "smoke:local": "node tools/smoke-local-extension.js",
@@ -7,5 +9,9 @@
     "smoke:picture-tools": "node tools/smoke-picture-tools.js",
     "smoke:frame-profiler": "node tools/smoke-frame-profiler.js"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0"
+  }
 }

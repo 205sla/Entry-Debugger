@@ -16,6 +16,8 @@
 ## 개발 및 검증
 
 ```powershell
+npm install
+npm run lint
 npm run check
 npm run build:dev
 npm run smoke:local
@@ -23,8 +25,11 @@ npm run smoke:block-text-copy
 npm run smoke:picture-tools
 ```
 
+- `npm run lint`: ESLint로 미정의 변수, 도달 불가 코드, 중복 `case`/키처럼 `node --check`가
+  놓치는 결함만 검사합니다(correctness 전용). 들여쓰기·따옴표 같은 스타일 규칙은 넣지 않으므로
+  기여 PR의 코드 스타일을 되돌리지 않습니다. 이 명령만 `npm install`이 필요합니다.
 - `npm run check`: manifest/README 버전, 확장 리소스, JS 문법, 설정 불변조건,
-  page-core 주입 순서, 함수 템플릿 ID 재매핑을 확인합니다.
+  page-core 주입 순서, 함수 템플릿 ID 재매핑을 확인합니다. 의존성 없이 동작합니다.
 - `npm run build:dev`: 로컬 Entry 서버에서도 동작하는 개발용 확장을 `dist/entry-debugger-extension-dev/`에 생성합니다. Chrome match pattern 제약 때문에 개발용 manifest는 `http://127.0.0.1/*`, `http://localhost/*`를 포함하고, 실제 동작 여부는 content script 내부에서 `/ws/*`로 다시 제한합니다.
 - `npm run smoke:local`: 로컬 Entry 만들기 화면에서 Chromium 기반 확장 주입과 핵심 UI 동작을 확인합니다. PR 생성 또는 PR 브랜치 업데이트 직전에 실행합니다.
 - `npm run smoke:block-text-copy`: 실제 Entry 블록 모델과 Chromium 클립보드를 사용해

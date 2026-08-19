@@ -82,6 +82,38 @@ Chrome Web Store 제출 대비로 content script는 다음 범위로 제한했�
 `onerror`, 실패 후 재시도는 아직 제품 코드에 반영하지 않았다. 이 안전망을 확장한
 뒤 page-world fallback 제거 여부를 별도 변경으로 판단한다.
 
+## 2026-08-19 correctness 린트 (v2.6.2)
+
+[결정 메모](./entry-debugger-refactor-decision-2026-08-19.md)의 1순위 항목(R8)을 반영했다.
+`npm run check`의 `node --check`는 **문법만** 본다. 미정의 변수, 도달 불가 코드, 중복 `case`,
+중복 객체 키는 통과시킨다. 그 구멍을 ESLint로 막았다.
+
+- 설정: 루트 `eslint.config.js`(flat config). 규칙은 `@eslint/js` recommended + correctness 6종.
+  **스타일·포매팅 규칙은 넣지 않는다** — 이 저장소는 ES5 모듈과 ES6 모듈이 섞여 있고,
+  외부 기여 PR을 스타일로 되돌리지 않기 위해서다.
+- 실행: `npm install` 후 `npm run lint`. `npm run check`는 의존성 없이 계속 동작한다
+  (두 명령을 합치지 않은 이유).
+- 파일군별 전역: 확장 본체는 browser+webextensions, `background.js`는 service worker,
+  `tools/`는 node+browser(스모크 스크립트가 `page.evaluate()` 안에 브라우저 코드를 담는다).
+- 저장소 관용구는 규칙에서 예외 처리했다 — 빈 `catch`(`allowEmptyCatch`), 파일명 정리의
+  제어문자 정규식(`no-control-regex` off).
+
+도입 시점 결과는 **error 0 · warning 17**이다. 즉 숨은 결함(미정의 변수·도달 불가·중복 case)은
+없었고, 남은 것은 죽은 코드 정리 대상뿐이다.
+
+| 경고 | 개수 | 성격 |
+| --- | ---: | --- |
+| `no-prototype-builtins`(frame-profiler) | 7 | 평범한 객체를 맵으로 쓰는 관용구 |
+| `no-unused-vars` | 3 | `hasKeys`, `pg` ×2 — 죽은 코드 |
+| `no-useless-escape`(block-text-copy) | 3 | 문자 클래스 안의 불필요한 이스케이프 |
+| `no-useless-assignment` | 2 | 분기 전 방어적 초기화 |
+| `no-useless-catch`(high-quality) | 1 | `catch (e) { throw e; }` + `finally` |
+| 사용되지 않는 `eslint-disable`(picture-tools) | 1 | 과거 `no-loop-func` 억제 잔재 |
+
+이 17개를 정리하면 `lint` 스크립트에 `--max-warnings=0`을 붙여 잠근다. 그 전까지 warning은
+게이트를 막지 않는다(경고가 쌓여도 CI가 멈추지 않게 하려는 게 아니라, 도구 도입 PR에
+제품 코드 수정을 섞지 않기 위한 분리다).
+
 ## 검증 포인트
 
 - page-world 코어 4개가 기능 모듈보다 먼저 주입된다.

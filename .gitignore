@@ -3,3 +3,5 @@
 /엔트리 디버거 웹사이트
 /entry-debugger-site
 dist/
+node_modules/
+.tmp/
