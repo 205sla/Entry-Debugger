@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const vm = require('vm');
+const { PRODUCTION_FILES } = require('./extension-files');
 
 const rootDir = path.resolve(__dirname, '..');
 const extensionDir = path.join(rootDir, 'entry-debugger-extension');
@@ -42,6 +43,17 @@ const functionTemplates = readUtf8(path.join(extensionDir, 'function-library-tem
 const popupHtml = readUtf8(path.join(extensionDir, 'popup.html'));
 const removedUploaderPath = path.join(extensionDir, 'eo-uploader.js');
 const extensionFiles = walk(extensionDir);
+const relativeExtensionFiles = extensionFiles
+  .map((filePath) => path.relative(extensionDir, filePath).split(path.sep).join('/'))
+  .sort();
+const expectedExtensionFiles = PRODUCTION_FILES.slice().sort();
+
+relativeExtensionFiles
+  .filter((relativePath) => !expectedExtensionFiles.includes(relativePath))
+  .forEach((relativePath) => fail('Unexpected file in production extension folder: ' + relativePath));
+expectedExtensionFiles
+  .filter((relativePath) => !relativeExtensionFiles.includes(relativePath))
+  .forEach((relativePath) => fail('Allowlisted production file is missing: ' + relativePath));
 
 if (!readmeVersionMatch) {
   fail('README version line was not found.');

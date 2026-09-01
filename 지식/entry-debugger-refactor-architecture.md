@@ -91,28 +91,29 @@ Chrome Web Store 제출 대비로 content script는 다음 범위로 제한했�
 - 설정: 루트 `eslint.config.js`(flat config). 규칙은 `@eslint/js` recommended + correctness 6종.
   **스타일·포매팅 규칙은 넣지 않는다** — 이 저장소는 ES5 모듈과 ES6 모듈이 섞여 있고,
   외부 기여 PR을 스타일로 되돌리지 않기 위해서다.
-- 실행: `npm install` 후 `npm run lint`. `npm run check`는 의존성 없이 계속 동작한다
+- 실행: `npm ci` 후 `npm run lint`. `npm run check`는 의존성 없이 계속 동작한다
   (두 명령을 합치지 않은 이유).
-- 파일군별 전역: 확장 본체는 browser+webextensions, `background.js`는 service worker,
-  `tools/`는 node+browser(스모크 스크립트가 `page.evaluate()` 안에 브라우저 코드를 담는다).
-- 저장소 관용구는 규칙에서 예외 처리했다 — 빈 `catch`(`allowEmptyCatch`), 파일명 정리의
-  제어문자 정규식(`no-control-regex` off).
+- 파일군별 전역: 확장 본체는 browser+webextensions, `background.js`는 service worker 전용,
+  일반 `tools/`는 node 전용이다. `page.evaluate()` 코드를 담는 `tools/smoke-*.js`에만
+  browser+webextensions를 추가한다.
+- 빈 `catch`는 저장소 관용구로 허용한다. 파일명 정리의 제어문자 정규식 한 줄만 이유가 붙은
+  `eslint-disable-next-line`을 사용하고 `no-control-regex` 자체는 error로 유지한다.
 
-도입 시점 결과는 **error 0 · warning 17**이다. 즉 숨은 결함(미정의 변수·도달 불가·중복 case)은
-없었고, 남은 것은 죽은 코드 정리 대상뿐이다.
+도입 시점 결과는 **error 0 · warning 17**이었다. 후속 검토에서 이 중
+`no-prototype-builtins` 7건은 단순 정리가 아니라 Entry의 임의 문자열 ID가
+`__proto__`/`constructor`/`hasOwnProperty`와 충돌할 수 있는 실제 결함임을 확인했다.
 
-| 경고 | 개수 | 성격 |
+| 기존 경고 | 개수 | 후속 조치 |
 | --- | ---: | --- |
-| `no-prototype-builtins`(frame-profiler) | 7 | 평범한 객체를 맵으로 쓰는 관용구 |
-| `no-unused-vars` | 3 | `hasKeys`, `pg` ×2 — 죽은 코드 |
-| `no-useless-escape`(block-text-copy) | 3 | 문자 클래스 안의 불필요한 이스케이프 |
-| `no-useless-assignment` | 2 | 분기 전 방어적 초기화 |
-| `no-useless-catch`(high-quality) | 1 | `catch (e) { throw e; }` + `finally` |
-| 사용되지 않는 `eslint-disable`(picture-tools) | 1 | 과거 `no-loop-func` 억제 잔재 |
+| `no-prototype-builtins`(frame-profiler) | 7 | 모든 문자열 키 맵을 null-prototype 사전으로 변경하고 특수 ID 회귀 검사 추가 |
+| `no-unused-vars` | 3 | `hasKeys`, `pg` ×2 제거 |
+| `no-useless-escape`(block-text-copy) | 3 | 동등한 정규식으로 정리 |
+| `no-useless-assignment` | 2 | 분기 전 불필요한 초기값 제거 |
+| `no-useless-catch`(high-quality) | 1 | `finally`만 유지 |
+| 사용되지 않는 `eslint-disable`(picture-tools) | 1 | 과거 `no-loop-func` 억제 제거 |
 
-이 17개를 정리하면 `lint` 스크립트에 `--max-warnings=0`을 붙여 잠근다. 그 전까지 warning은
-게이트를 막지 않는다(경고가 쌓여도 CI가 멈추지 않게 하려는 게 아니라, 도구 도입 PR에
-제품 코드 수정을 섞지 않기 위한 분리다).
+현재 결과는 **error 0 · warning 0**이며 `lint`는 `--max-warnings=0`으로 잠겨 있다.
+GitHub Actions도 `npm ci` 후 `npm run verify`를 실행해 lint/check/build를 PR 게이트로 사용한다.
 
 ## 검증 포인트
 

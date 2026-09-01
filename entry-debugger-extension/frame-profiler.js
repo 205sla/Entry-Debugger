@@ -45,12 +45,18 @@
   var lastFrameAt = 0;
   var fps = 0;
 
-  var frameObj = {};         // objId -> { name, thumb, t }
-  var frameThread = {};      // key -> { objId, objName, label, hatId, t }
-  var dispObj = {};
-  var dispThread = {};
-  var hatCache = {};         // executor.id -> { hatId, label }
-  var expanded = {};         // objId -> true
+  function createDictionary() { return Object.create(null); }
+  function hasOwn(target, key) { return Object.prototype.hasOwnProperty.call(target, key); }
+
+  // Entry 프로젝트에서 읽은 ID는 임의 문자열일 수 있다. 일반 객체를 맵으로 쓰면
+  // __proto__/constructor/hasOwnProperty 키가 프로토타입과 충돌하므로 모두 null-prototype
+  // 사전으로 유지한다.
+  var frameObj = createDictionary();         // objId -> { name, thumb, t }
+  var frameThread = createDictionary();      // key -> { objId, objName, label, hatId, t }
+  var dispObj = createDictionary();
+  var dispThread = createDictionary();
+  var hatCache = createDictionary();         // executor.id -> { hatId, label }
+  var expanded = createDictionary();         // objId -> true
 
   var now = (window.performance && window.performance.now)
     ? function () { return window.performance.now(); }
@@ -280,9 +286,9 @@
 
   function decayAdd(disp, frame, makeEntry) {
     var id;
-    for (id in disp) { if (disp.hasOwnProperty(id)) disp[id].t *= EMA; }
+    for (id in disp) { if (hasOwn(disp, id)) disp[id].t *= EMA; }
     for (id in frame) {
-      if (!frame.hasOwnProperty(id)) continue;
+      if (!hasOwn(frame, id)) continue;
       var f = frame[id];
       var d = disp[id];
       if (!d) { d = disp[id] = makeEntry(f); }
@@ -292,18 +298,21 @@
       if (f.objName) d.objName = f.objName;
       if (f.label) d.label = f.label;
     }
-    for (id in disp) { if (disp.hasOwnProperty(id) && disp[id].t < 0.01) delete disp[id]; }
+    for (id in disp) { if (hasOwn(disp, id) && disp[id].t < 0.01) delete disp[id]; }
   }
   function flushFrame() {
     decayAdd(dispObj, frameObj, function (f) { return { name: f.name, thumb: f.thumb, t: 0 }; });
     decayAdd(dispThread, frameThread, function (f) {
       return { objId: f.objId, objName: f.objName, label: f.label, hatId: f.hatId, t: 0 };
     });
-    frameObj = {};
-    frameThread = {};
+    frameObj = createDictionary();
+    frameThread = createDictionary();
   }
-  function resetData() { frameObj = {}; frameThread = {}; dispObj = {}; dispThread = {}; hatCache = {}; orderedIds = []; lastSig = ''; }
-  function hasKeys(o) { for (var k in o) { if (o.hasOwnProperty(k)) return true; } return false; }
+  function resetData() {
+    frameObj = createDictionary(); frameThread = createDictionary();
+    dispObj = createDictionary(); dispThread = createDictionary();
+    hatCache = createDictionary(); orderedIds = []; lastSig = '';
+  }
 
   function frameLoop() {
     rafId = 0;
@@ -439,7 +448,7 @@
 
   function threadsOf(objId) {
     var arr = [], k;
-    for (k in dispThread) { if (dispThread.hasOwnProperty(k) && dispThread[k].objId === objId) arr.push(dispThread[k]); }
+    for (k in dispThread) { if (hasOwn(dispThread, k) && dispThread[k].objId === objId) arr.push(dispThread[k]); }
     arr.sort(function (a, b) { return b.t - a.t; });
     return arr;
   }
@@ -469,7 +478,7 @@
 
   function computeOrder() {
     var arr = [], id;
-    for (id in dispObj) { if (dispObj.hasOwnProperty(id)) arr.push(id); }
+    for (id in dispObj) { if (hasOwn(dispObj, id)) arr.push(id); }
     arr.sort(function (a, b) { return dispObj[b].t - dispObj[a].t; });
     return arr.slice(0, TOP_N);
   }
@@ -559,7 +568,7 @@
     if (!orderedIds.length || (!hovering && !paused && t - lastOrderAt >= ORDER_MS)) { orderedIds = computeOrder(); lastOrderAt = t; }
 
     var total = 0, id;
-    for (id in dispObj) { if (dispObj.hasOwnProperty(id)) total += dispObj[id].t; }
+    for (id in dispObj) { if (hasOwn(dispObj, id)) total += dispObj[id].t; }
     if (ovMeta) ovMeta.textContent = paused
       ? '⏸ 일시정지 · 마지막 상태'
       : (fmt(total) + 'ms/프레임 · ' + (fps ? fps.toFixed(0) : '-') + 'fps');
@@ -587,7 +596,7 @@
       stopLoop();
       resetData();
       removeOverlay();
-      expanded = {};
+      expanded = createDictionary();
     }
   }
 

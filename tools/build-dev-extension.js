@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { copyProductionFiles } = require('./extension-files');
 
 const rootDir = path.resolve(__dirname, '..');
 const sourceDir = path.join(rootDir, 'entry-debugger-extension');
@@ -21,12 +22,8 @@ const LOCAL_RESOURCE_MATCHES = [
 ];
 
 function copyExtension() {
-  fs.rmSync(targetDir, { recursive: true, force: true });
   fs.mkdirSync(distDir, { recursive: true });
-  fs.cpSync(sourceDir, targetDir, {
-    recursive: true,
-    filter: (source) => !source.includes(path.sep + '.git' + path.sep)
-  });
+  copyProductionFiles(sourceDir, targetDir);
 }
 
 function writeDevManifest() {

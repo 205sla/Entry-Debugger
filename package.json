@@ -1,9 +1,14 @@
 {
   "private": true,
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
   "scripts": {
-    "lint": "eslint .",
-    "check": "node tools/check-extension.js && node tools/check-settings.js && node tools/check-page-core-loader.js && node tools/check-function-library.js && node tools/check-block-text-copy.js",
+    "lint": "eslint . --max-warnings=0",
+    "check": "node tools/check-extension.js && node tools/check-settings.js && node tools/check-page-core-loader.js && node tools/check-function-library.js && node tools/check-block-text-copy.js && node tools/check-frame-profiler.js",
+    "verify": "npm run lint && npm run check && npm run build:dev && npm run build:release",
     "build:dev": "node tools/build-dev-extension.js",
+    "build:release": "node tools/build-release-extension.js",
     "smoke:local": "node tools/smoke-local-extension.js",
     "smoke:block-text-copy": "node tools/smoke-block-text-copy.js",
     "smoke:picture-tools": "node tools/smoke-picture-tools.js",

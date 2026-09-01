@@ -105,7 +105,7 @@
       return false;
     }
 
-    var patched = false;
+    var patched;
     if (Patches && typeof Patches.patchMethod === 'function') {
       patched = Patches.patchMethod(entry, 'init', 'boost-mode', function (originalInit) {
         return function (container, options) {

@@ -96,7 +96,9 @@ GIF 분해·대량 업로드·ZIP 내보내기 진행은 "모양 추가하기" �
   종점이 `inject.js`인데 그 스크립트가 디버깅 탭 기능에 묶여 주입된다는 점이다. block-text-copy가
   page world에서 `Entry.toast`를 직접 호출하고, 호출이 불가능할 때만 기존 `BLOCK_TEXT_COPY_TOAST`
   경로로 넘어가도록 바꿨다. 제목·타입 매핑(`error→alert` / 그 외 `success`)은 그대로다.
-  `tools/check-block-text-copy.js`가 네 경우(토스트 유/무 × 성공/실패)를 고정한다.
+  `tools/check-block-text-copy.js`가 직접 성공·오류, 비동기 clipboard 실패 뒤 브라우저 fallback 성공,
+  `Entry.toast` 예외, 토스트 부재 fallback을 고정한다. `smoke:block-text-copy`는 디버깅 탭 OFF와
+  `inject.js` 부재를 먼저 확인한 뒤 실제 Entry 토스트를 검증한다.
 - **2026-06-23**: 디버거 패널 자체 토스트(`.ed-toast`, 패널 안 하단 중앙, 파랑/빨강
   2색)를 **전면 제거**하고 엔트리 네이티브 토스트로 통일. content.js `showToast`
   호출부 13곳을 `(type, title, message)`로 명시, `BLOCK_TEXT_COPY_TOAST` 릴레이는

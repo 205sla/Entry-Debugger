@@ -407,6 +407,7 @@
   }
 
   function safeName(s) {
+    // eslint-disable-next-line no-control-regex -- Windows 파일명에서 ASCII 제어문자를 제거한다.
     return String(s == null ? '' : s).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/^[\s.]+|\s+$/g, '').slice(0, 80) || 'image';
   }
 
@@ -465,11 +466,9 @@
         var f = files[i];
         if (/\.gif$/i.test(f.name) || f.type === 'image/gif') {
           prog('GIF 분해 중', f.name);
-          /* eslint-disable no-loop-func */
           var frames = await gifToPngFrames(f, (function (name) {
             return function (idx, nn) { prog('GIF 분해 중', name + ' (' + idx + '/' + nn + ' 프레임)'); };
           })(f.name), isCancelled);
-          /* eslint-enable no-loop-func */
           out.push.apply(out, frames);
         } else {
           out.push(f);
@@ -1353,7 +1352,6 @@
   // instead of a full injectPicture re-render (slow with 1000+ pictures). Falls back if
   // any precondition (rendered view / widget / mapping) is missing.
   function reorderDomFast(o) {
-    var pg = getPlayground();
     try {
       var w = getPictureListWidget();
       var widgetItems = getPictureListItems(w);
@@ -1466,7 +1464,6 @@
   // Copy the group to another object (originals kept). Target is offscreen and the current
   // object's pictures are unchanged, so suppress injectPicture entirely (data only).
   function copyPicturesTo(targetObj) {
-    var pg = getPlayground();
     var o = curObj();
     if (!o || !targetObj || targetObj.id === o.id) return;
     var picks = picksFromSelection(o);

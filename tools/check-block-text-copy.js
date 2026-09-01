@@ -112,6 +112,7 @@ async function copyBlockText(block, options) {
   let messageHandler = null;
   let shownOptions = null;
   let copiedText = null;
+  let fallbackTextarea = null;
   const toastCalls = [];
 
   const contextMenu = {
@@ -140,18 +141,47 @@ async function copyBlockText(block, options) {
   if (options.toast) {
     Entry.toast = {
       success: function (title, message) {
+        if (options.toastThrows) throw new Error('toast unavailable');
         toastCalls.push({ type: 'success', title, message });
       },
       warning: function (title, message) {
+        if (options.toastThrows) throw new Error('toast unavailable');
         toastCalls.push({ type: 'warning', title, message });
       },
       alert: function (title, message) {
+        if (options.toastThrows) throw new Error('toast unavailable');
         toastCalls.push({ type: 'alert', title, message });
       }
     };
   }
 
   const posts = [];
+  const documentObject = {
+    body: {
+      appendChild: function (element) {
+        fallbackTextarea = element;
+      }
+    },
+    createElement: function (tagName) {
+      if (tagName !== 'textarea') throw new Error('Unexpected fallback element: ' + tagName);
+      return {
+        value: '',
+        style: {},
+        setAttribute: function () {},
+        focus: function () {},
+        select: function () {},
+        remove: function () {
+          fallbackTextarea = null;
+        }
+      };
+    },
+    execCommand: function (command) {
+      if (command !== 'copy') return false;
+      if (!options.fallbackCopySucceeds) return false;
+      copiedText = fallbackTextarea && fallbackTextarea.value;
+      return true;
+    }
+  };
   const windowObject = {
     Entry,
     location: { origin: 'https://playentry.org' },
@@ -172,7 +202,7 @@ async function copyBlockText(block, options) {
       clipboard: {
         writeText: function (text) {
           if (options.failCopy) {
-            // 클립보드 실패 → fallbackCopyText가 document를 쓰다 다시 실패 → 오류 알림 경로.
+            // 비동기 clipboard 실패 뒤 실제 fallbackCopyText 분기로 넘어간다.
             return Promise.reject(new Error('clipboard denied'));
           }
           copiedText = text;
@@ -180,7 +210,7 @@ async function copyBlockText(block, options) {
         }
       }
     },
-    document: {},
+    document: documentObject,
     console,
     Date,
     Promise,
@@ -286,6 +316,28 @@ async function checkToastPaths() {
         { type: 'alert', title: '블록 텍스트 복사', message: '텍스트 복사에 실패했습니다.' }
       ],
       toastPosts: []
+    }
+  );
+
+  assertToast(
+    'toast available / async clipboard denied / browser fallback success',
+    await copyBlockText(createSingleStatementFixture(), {
+      toast: true,
+      failCopy: true,
+      fallbackCopySucceeds: true
+    }),
+    {
+      toastCalls: [{ type: 'success', title: '블록 텍스트 복사', message: '복사되었습니다.' }],
+      toastPosts: []
+    }
+  );
+
+  assertToast(
+    'Entry.toast throws / relay fallback preserved',
+    await copyBlockText(createSingleStatementFixture(), { toast: true, toastThrows: true }),
+    {
+      toastCalls: [],
+      toastPosts: [{ type: 'info', message: '복사되었습니다.' }]
     }
   );
 

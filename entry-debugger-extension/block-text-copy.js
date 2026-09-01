@@ -1130,8 +1130,8 @@
 
   function normalizeVisualText(text) {
     return normalizeText(text)
-      .replace(/\s+([,.:;%\]\)])/g, '$1')
-      .replace(/([\[\(])\s+/g, '$1');
+      .replace(/\s+([,.:;%\]])/g, '$1')
+      .replace(/([[(])\s+/g, '$1');
   }
 
   function indent(depth) {

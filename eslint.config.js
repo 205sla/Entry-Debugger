@@ -28,18 +28,9 @@ const correctnessRules = {
   // 빈 catch는 이 저장소의 의도된 관용구다(Entry 내부 접근 실패를 삼킨다).
   'no-empty': ['error', { allowEmptyCatch: true }],
 
-  // 파일명 정리에서 제어문자를 의도적으로 제거한다(picture-tools safeName).
-  'no-control-regex': 'off',
-
-  // ── 아래는 "정리 대상"이지 동작 결함이 아니다. 게이트를 막지 않도록 warn으로 둔다.
-  //    warn이 0이 되면 lint 스크립트에 --max-warnings=0을 붙여 잠글 수 있다.
-  'no-unused-vars': ['warn', { args: 'none', caughtErrors: 'none' }],
-  // 평범한 객체를 맵으로 쓰는 관용구. 키가 'hasOwnProperty'일 때만 깨진다.
-  'no-prototype-builtins': 'warn',
-  // 분기 전에 두는 방어적 초기화.
-  'no-useless-assignment': 'warn',
-  'no-useless-catch': 'warn',
-  'no-useless-escape': 'warn',
+  // 제품·도구 코드 모두 warning 없이 통과해야 한다. 예외가 필요한 한 줄은 해당 위치에서
+  // eslint-disable-next-line과 이유를 함께 기록한다.
+  'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
 
   // ── recommended에 없는 correctness 규칙 추가.
   'array-callback-return': 'error',
@@ -57,6 +48,7 @@ module.exports = [
   {
     // 확장 본체: 브라우저 + 크롬 확장 API. content script와 page-world 모듈이 섞여 있다.
     files: ['entry-debugger-extension/**/*.js'],
+    ignores: ['entry-debugger-extension/background.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',
@@ -70,27 +62,39 @@ module.exports = [
     rules: Object.assign({}, js.configs.recommended.rules, correctnessRules)
   },
   {
-    // background.js만 service worker다(importScripts).
+    // background.js는 DOM 전역이 없는 MV3 service worker다(importScripts).
     files: ['entry-debugger-extension/background.js'],
     languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
       globals: Object.assign({}, globals.serviceworker, globals.webextensions)
-    }
+    },
+    rules: Object.assign({}, js.configs.recommended.rules, correctnessRules)
   },
   {
-    // 검증 도구: Node CommonJS. 다만 smoke 스크립트는 page.evaluate() 안에 브라우저 코드를
-    // 그대로 담으므로 브라우저 전역도 함께 허용한다.
+    // 검증·빌드 도구: Node CommonJS. 브라우저 전역을 허용하지 않아 런타임 경계 실수를 잡는다.
     files: ['tools/**/*.js', 'eslint.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
       globals: Object.assign(
         {},
-        globals.node,
+        globals.node
+      )
+    },
+    rules: Object.assign({}, js.configs.recommended.rules, correctnessRules)
+  },
+  {
+    // smoke 파일은 page.evaluate()/waitForFunction 콜백에 page-world 코드를 포함한다.
+    // 이중 런타임 파일에만 browser/webextensions/Entry 전역을 추가한다.
+    files: ['tools/smoke-*.js'],
+    languageOptions: {
+      globals: Object.assign(
+        {},
         globals.browser,
         globals.webextensions,
         sharedExtensionGlobals
       )
-    },
-    rules: Object.assign({}, js.configs.recommended.rules, correctnessRules)
+    }
   }
 ];

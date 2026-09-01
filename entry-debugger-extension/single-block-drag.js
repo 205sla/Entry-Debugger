@@ -245,7 +245,7 @@
     var nextBlock = block.getNextBlock();
     var originalThread = typeof block.getThread === 'function' ? block.getThread() : null;
     var isFirstStatementBlock = !prevBlock && isStatementThread(entry, originalThread);
-    var didPrepare = false;
+    var didPrepare;
 
     try {
       if (prevBlock) {

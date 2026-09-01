@@ -8,6 +8,16 @@ const rootDir = path.resolve(__dirname, '..');
 const extensionDir = path.join(rootDir, 'dist', 'entry-debugger-extension-dev');
 const localEntryUrl = process.env.ENTRY_DEBUGGER_SMOKE_URL ||
   'http://127.0.0.1:8080/ws/abcdef0123456789abcdef01';
+const defaultEntryVendorDir = path.resolve(
+  rootDir,
+  '..',
+  '..',
+  'apps',
+  'MYentry',
+  'public',
+  'lib',
+  'vendor'
+);
 
 function resolvePlaywright() {
   const candidateRoots = [
@@ -25,6 +35,94 @@ function resolvePlaywright() {
   throw new Error('Playwright를 찾을 수 없습니다. apps/MYentry-game의 node_modules를 확인하세요.');
 }
 
+function resolveChromiumExecutable() {
+  const configured = process.env.ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE;
+  if (configured) {
+    if (!fs.existsSync(configured)) {
+      throw new Error('ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE does not exist: ' + configured);
+    }
+    return configured;
+  }
+
+  if (process.platform === 'win32') {
+    const puppeteerChromeRoot = path.join(
+      os.homedir(),
+      '.cache',
+      'puppeteer',
+      'chrome'
+    );
+    let cachedChrome;
+    if (fs.existsSync(puppeteerChromeRoot)) {
+      cachedChrome = fs.readdirSync(puppeteerChromeRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('win64-'))
+        .sort((left, right) => right.name.localeCompare(left.name, undefined, {
+          numeric: true
+        }))
+        .map((entry) => path.join(
+          puppeteerChromeRoot,
+          entry.name,
+          'chrome-win64',
+          'chrome.exe'
+        ))
+        .find((candidate) => fs.existsSync(candidate));
+    }
+
+    const candidates = [
+      cachedChrome,
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    ];
+    return candidates.find((candidate) => candidate && fs.existsSync(candidate));
+  }
+
+  return undefined;
+}
+
+async function installLocalEntryVendorFallbacks(page) {
+  const smokeUrl = new URL(localEntryUrl);
+  if (smokeUrl.hostname !== '127.0.0.1' && smokeUrl.hostname !== 'localhost') {
+    return 0;
+  }
+
+  const vendorDir = process.env.ENTRY_DEBUGGER_ENTRY_VENDOR_DIR ||
+    defaultEntryVendorDir;
+  const mappings = [
+    {
+      url: 'https://playentry.org/lib/lodash/dist/lodash.min.js',
+      file: path.join(vendorDir, 'lodash', 'lodash.min.js')
+    },
+    {
+      url: 'https://playentry.org/lib/jquery-ui/ui/minified/jquery-ui.min.js',
+      file: path.join(vendorDir, 'jquery-ui', 'jquery-ui.min.js')
+    },
+    {
+      url: 'https://playentry.org/js/jshint.js',
+      file: path.join(vendorDir, 'jshint', 'jshint.js')
+    }
+  ];
+  const missing = mappings.filter((mapping) => !fs.existsSync(mapping.file));
+
+  if (missing.length) {
+    if (process.env.ENTRY_DEBUGGER_ENTRY_VENDOR_DIR) {
+      throw new Error(
+        'ENTRY_DEBUGGER_ENTRY_VENDOR_DIR is missing required files: ' +
+        missing.map((mapping) => mapping.file).join(', ')
+      );
+    }
+    return 0;
+  }
+
+  for (const mapping of mappings) {
+    await page.route(mapping.url, (route) => route.fulfill({
+      path: mapping.file,
+      contentType: 'application/javascript'
+    }));
+  }
+  return mappings.length;
+}
+
 async function seedExtensionSettings(context) {
   let worker = context.serviceWorkers()[0];
   if (!worker) {
@@ -34,7 +132,7 @@ async function seedExtensionSettings(context) {
   await worker.evaluate(() => new Promise((resolve, reject) => {
     chrome.storage.local.set({
       enabled: true,
-      debuggerTabEnabled: true,
+      debuggerTabEnabled: false,
       blockTextCopyEnabled: true
     }, () => {
       const error = chrome.runtime.lastError;
@@ -119,6 +217,7 @@ async function main() {
 
   try {
     context = await chromium.launchPersistentContext(userDataDir, {
+      executablePath: resolveChromiumExecutable(),
       headless: false,
       ignoreDefaultArgs: ['--disable-extensions'],
       args: [
@@ -133,6 +232,7 @@ async function main() {
     );
 
     const page = context.pages()[0] || await context.newPage();
+    const localVendorFallbacks = await installLocalEntryVendorFallbacks(page);
     await page.goto(localEntryUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 120000
@@ -142,6 +242,12 @@ async function main() {
       () => window.__ENTRY_DEBUGGER_BLOCK_TEXT_COPY_INJECTED__ === true,
       { timeout: 60000 }
     );
+    const debuggerScriptInjected = await page.evaluate(
+      () => window.__ENTRY_DEBUGGER_INJECTED__ === true
+    );
+    if (debuggerScriptInjected) {
+      throw new Error('inject.js must be absent in the debugger-tab-OFF regression scenario.');
+    }
 
     const fixture = createFixture();
     const rendered = await page.evaluate((codeFixture) => {
@@ -185,11 +291,36 @@ async function main() {
       };
     }, fixture);
 
-    await page.getByText('텍스트로 복사하기', { exact: true }).click();
-    await page.waitForFunction(
-      () => !!document.querySelector('#entryToastContainer .entryToastSuccess'),
-      { timeout: 30000 }
-    );
+    // 개발 서버의 기존 warning overlay가 실제 포인터 좌표를 가릴 수 있으므로
+    // React 기반 ContextMenu의 대상 노드에 click 이벤트를 직접 전달한다.
+    await page.getByText('텍스트로 복사하기', { exact: true })
+      .dispatchEvent('click');
+    try {
+      await page.waitForFunction(
+        () => !!document.querySelector('#entryToastContainer .entryToastSuccess'),
+        { timeout: 30000 }
+      );
+    } catch (error) {
+      const diagnostics = await page.evaluate(async () => {
+        const clipboardText = await navigator.clipboard.readText().catch(() => null);
+        return {
+          blockTextCopyInjected:
+            window.__ENTRY_DEBUGGER_BLOCK_TEXT_COPY_INJECTED__ === true,
+          debuggerScriptInjected: window.__ENTRY_DEBUGGER_INJECTED__ === true,
+          entryToastType: typeof window.Entry?.toast,
+          toastMarkup: document.querySelector('#entryToastContainer')?.outerHTML || null,
+          clipboardLength: clipboardText == null ? null : clipboardText.length,
+          clipboardStartsWithFixture:
+            typeof clipboardText === 'string' &&
+            clipboardText.startsWith('시작하기 버튼을 클릭했을 때')
+        };
+      });
+      throw new Error(
+        (error && error.message ? error.message : String(error)) +
+        '\nDiagnostics: ' + JSON.stringify(diagnostics),
+        { cause: error }
+      );
+    }
     const copiedText = await page.evaluate(() => navigator.clipboard.readText());
     const normalizedCopiedText = copiedText.replace(/\r\n/g, '\n');
     const expectedText = [
@@ -219,6 +350,8 @@ async function main() {
       blockCount: rendered.blockCount,
       lineBreakConstructorName: rendered.lineBreakConstructorName,
       lineBreakInstance: rendered.lineBreakInstance,
+      debuggerScriptInjected,
+      localVendorFallbacks,
       copiedText: normalizedCopiedText
     }, null, 2));
   } finally {

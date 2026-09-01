@@ -15,11 +15,14 @@
 
 ## 개발 및 검증
 
+Node.js `20.19+`, `22.13+` 또는 `24+`가 필요합니다(ESLint 10 지원 범위).
+
 ```powershell
-npm install
+npm ci
 npm run lint
 npm run check
 npm run build:dev
+npm run build:release
 npm run smoke:local
 npm run smoke:block-text-copy
 npm run smoke:picture-tools
@@ -27,15 +30,22 @@ npm run smoke:picture-tools
 
 - `npm run lint`: ESLint로 미정의 변수, 도달 불가 코드, 중복 `case`/키처럼 `node --check`가
   놓치는 결함만 검사합니다(correctness 전용). 들여쓰기·따옴표 같은 스타일 규칙은 넣지 않으므로
-  기여 PR의 코드 스타일을 되돌리지 않습니다. 이 명령만 `npm install`이 필요합니다.
+  기여 PR의 코드 스타일을 되돌리지 않습니다. warning도 실패하도록 `--max-warnings=0`으로 잠겨
+  있으며 이 명령만 `npm ci`가 필요합니다.
 - `npm run check`: manifest/README 버전, 확장 리소스, JS 문법, 설정 불변조건,
-  page-core 주입 순서, 함수 템플릿 ID 재매핑을 확인합니다. 의존성 없이 동작합니다.
+  page-core 주입 순서, 함수 템플릿 ID 재매핑, 블록 복사 토스트 경로,
+  프레임 프로파일러 특수 ID 안전성을 확인합니다. 의존성 없이 동작합니다.
+- `npm run verify`: CI와 같은 순서로 lint, check, 개발용 빌드, 제출용 빌드를 모두 실행합니다.
 - `npm run build:dev`: 로컬 Entry 서버에서도 동작하는 개발용 확장을 `dist/entry-debugger-extension-dev/`에 생성합니다. Chrome match pattern 제약 때문에 개발용 manifest는 `http://127.0.0.1/*`, `http://localhost/*`를 포함하고, 실제 동작 여부는 content script 내부에서 `/ws/*`로 다시 제한합니다.
+- `npm run build:release`: 명시적으로 허용된 production 파일 26개만
+  `dist/entry-debugger-extension-release/`에 복사합니다. Chrome Web Store ZIP은 이 폴더의
+  내용으로 생성합니다.
 - `npm run smoke:local`: 로컬 Entry 만들기 화면에서 Chromium 기반 확장 주입과 핵심 UI 동작을 확인합니다. PR 생성 또는 PR 브랜치 업데이트 직전에 실행합니다.
 - `npm run smoke:block-text-copy`: 실제 Entry 블록 모델과 Chromium 클립보드를 사용해
   반복문 안의 `만일~아니면` 텍스트 복사 결과를 확인합니다.
 - `npm run smoke:picture-tools`: 모양 명령·복제·재정렬·이름변경과 10개 업로드 경계, GIF 프레임 합산, 업로드 창 종료 취소를 Chromium에서 검증합니다.
-- 실제 Chrome Web Store 제출용 폴더는 계속 `entry-debugger-extension/`입니다.
+- `entry-debugger-extension/`은 production 원본이며, 실제 Chrome Web Store 제출에는
+  allowlist로 생성한 `dist/entry-debugger-extension-release/`를 사용합니다.
 
 ## 사용 방법
 

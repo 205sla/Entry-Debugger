@@ -103,8 +103,6 @@
 
     try {
       return originalGetDataUrl.apply(blockView, args);
-    } catch (e) {
-      throw e;
     } finally {
       restoreHighQualityState(board, originalBoardScale, restoreRect);
     }
