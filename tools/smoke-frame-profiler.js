@@ -62,11 +62,16 @@ async function main() {
   }
 
   const { chromium } = resolvePlaywright();
+  const executablePath = process.env.ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE;
+  if (executablePath && !fs.existsSync(executablePath)) {
+    throw new Error('ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE does not exist: ' + executablePath);
+  }
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'entry-frame-profiler-smoke-'));
   let context;
 
   try {
     context = await chromium.launchPersistentContext(profileDir, {
+      ...(executablePath ? { executablePath } : {}),
       headless: false,
       ignoreDefaultArgs: ['--disable-extensions'],
       args: [

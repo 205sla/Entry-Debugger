@@ -172,6 +172,10 @@ async function main() {
     });
 
     await page.waitForSelector('.propertyTab', { timeout: 180000 });
+    // 비로그인 실사이트의 최초 안내 레이어는 검증 대상이 아니며 작업실 클릭을 가린다.
+    await page.addStyleTag({
+      content: '.tooltipGuide { pointer-events: none !important; }'
+    });
     await page.waitForSelector('.propertyTabdebugging', { timeout: 60000 });
     await page.waitForSelector('#ed-boost-mode-toggle', {
       state: 'attached',
@@ -213,7 +217,8 @@ async function main() {
         maxLayoutShift: Math.max.apply(null, layoutDeltas)
       };
     });
-    await page.click('.entryMaximizeButtonWorkspace_w');
+    // 실사이트의 최초 안내 tooltipGuide가 버튼 좌표를 가릴 수 있으므로 노드에 직접 전달한다.
+    await page.dispatchEvent('.entryMaximizeButtonWorkspace_w', 'click');
     await page.waitForSelector(
       '.entryPopupWindow > .entryEngineWorkspace_w > #ed-boost-mode-toggle',
       { state: 'visible', timeout: 60000 }
@@ -236,8 +241,9 @@ async function main() {
         leftOfCoordinate: buttonRect.right <= coordinateRect.left
       };
     });
-    await page.click(
-      '.entryPopupWindow > .entryEngineWorkspace_w > .entryMaximizeButtonWorkspace_w'
+    await page.dispatchEvent(
+      '.entryPopupWindow > .entryEngineWorkspace_w > .entryMaximizeButtonWorkspace_w',
+      'click'
     );
     await page.waitForFunction(() => {
       const button = document.querySelector('#ed-boost-mode-toggle');

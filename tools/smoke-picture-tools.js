@@ -86,13 +86,15 @@ async function openUploadPanel(page) {
     const root = document.createElement('div');
     root.id = 'EntryPopupContainer';
     root.className = 'modal';
-    root.style.cssText = 'position:fixed;left:20px;top:20px;z-index:2147483000;background:#fff;padding:20px;';
+    root.style.cssText =
+      'display:block!important;visibility:visible!important;opacity:1!important;' +
+      'position:fixed;left:20px;top:20px;z-index:2147483000;background:#fff;padding:20px;';
     root.innerHTML =
       '<div class="popup">' +
-        '<div class="popup_wrap__fixture">' +
-          '<header><button class="imbtn_pop_close__fixture">X</button>' +
-          '<a class="btn__fixture" role="button">추가하기</a></header>' +
-          '<div class="file_add_box__fixture" style="width:180px;height:60px;">' +
+        '<div class="popup_wrap__fixture" style="display:block!important;visibility:visible!important;">' +
+          '<header><button class="imbtn_pop_close__fixture" style="display:inline-block!important;">X</button>' +
+          '<a class="btn__fixture" role="button" style="display:inline-block!important;">추가하기</a></header>' +
+          '<div class="file_add_box__fixture" style="display:block!important;visibility:visible!important;width:180px;height:60px;">' +
             '<label for="inpt_file">파일 올리기</label>' +
             '<input type="file" id="inpt_file" multiple>' +
           '</div>' +
@@ -127,10 +129,14 @@ async function openUploadPanel(page) {
 }
 
 async function chooseFiles(page, files) {
-  const chooserPromise = page.waitForEvent('filechooser');
-  await page.locator('[class*="file_add_box"]').click({ force: true });
-  const chooser = await chooserPromise;
-  await chooser.setFiles(files);
+  // trusted 클릭으로 activateUploadSession을 실행한다. Chromium 자동화에서 native chooser
+  // 이벤트가 전달되지 않을 수 있어 파일은 확장이 만든 숨은 input에 직접 설정한다.
+  await page.locator('[class*="file_add_box"]').click();
+  const extensionInput = page.locator('input[type="file"][accept="image/*,.gif"]');
+  if (await extensionInput.count() !== 1) {
+    throw new Error('모양 도구의 숨은 파일 input을 하나만 찾지 못했습니다.');
+  }
+  await extensionInput.setInputFiles(files);
 }
 
 async function waitForBatchCount(page, count) {
@@ -143,7 +149,8 @@ async function waitForBatchCount(page, count) {
 }
 
 async function closeUploadPanel(page) {
-  await page.locator('#EntryPopupContainer [class*="imbtn_pop_close"]').click({ force: true });
+  await page.locator('#EntryPopupContainer [class*="imbtn_pop_close"]')
+    .dispatchEvent('click');
   await page.waitForSelector('#EntryPopupContainer', { state: 'detached', timeout: 30000 });
 }
 
@@ -156,6 +163,10 @@ async function main() {
   }
 
   const { chromium } = resolvePlaywright();
+  const executablePath = process.env.ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE;
+  if (executablePath && !fs.existsSync(executablePath)) {
+    throw new Error('ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE does not exist: ' + executablePath);
+  }
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'entry-picture-tools-smoke-'));
   const profileDir = path.join(tempDir, 'profile');
   const fixtureDir = path.join(tempDir, 'fixtures');
@@ -167,6 +178,7 @@ async function main() {
 
   try {
     context = await chromium.launchPersistentContext(profileDir, {
+      ...(executablePath ? { executablePath } : {}),
       headless: false,
       ignoreDefaultArgs: ['--disable-extensions'],
       args: [
@@ -177,13 +189,30 @@ async function main() {
     await seedSettings(context);
     const page = context.pages()[0] || await context.newPage();
     await page.goto(localEntryUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForFunction(
+      () => window.Entry?.container?.getAllObjects,
+      { timeout: 180000 }
+    );
+    await page.addStyleTag({
+      content: '.tooltipGuide { pointer-events: none !important; }'
+    });
+    const selectedSpriteId = await page.evaluate(() => {
+      const sprite = Entry.container.getAllObjects()
+        .find((object) => object && object.objectType === 'sprite');
+      if (!sprite) return null;
+      Entry.container.selectObject(sprite.id, true);
+      return sprite.id;
+    });
+    if (!selectedSpriteId) {
+      throw new Error('현재 작품에서 모양 탭을 지원하는 sprite 오브젝트를 찾을 수 없습니다.');
+    }
     await page.waitForSelector('#entryPictureTab', { timeout: 180000 });
     await page.waitForFunction(
       () => window.__ENTRY_DEBUGGER_PICTURE_TOOLS_INJECTED__ === true,
       { timeout: 60000 }
     );
     await page.waitForTimeout(500);
-    await page.click('#entryPictureTab', { force: true });
+    await page.dispatchEvent('#entryPictureTab', 'click');
     await page.waitForSelector('li.entryPlaygroundPictureElement', { timeout: 60000 });
 
     await page.evaluate(() => {
@@ -412,7 +441,10 @@ async function main() {
     if (gifUpload.batches.join(',') !== '4' ||
         !gifUpload.names.some((name) => /1x1_1\.png$/i.test(name)) ||
         gifUpload.hasProgress) {
-      throw new Error('GIF 프레임과 일반 이미지 합산 기준이 잘못되었습니다.');
+      throw new Error(
+        'GIF 프레임과 일반 이미지 합산 기준이 잘못되었습니다: ' +
+        JSON.stringify(gifUpload)
+      );
     }
     await closeUploadPanel(page);
 
@@ -446,7 +478,7 @@ async function main() {
     await openUploadPanel(page);
     await chooseFiles(page, png25);
     await waitForBatchCount(page, 1);
-    await page.getByText('추가하기', { exact: true }).click({ force: true });
+    await page.getByText('추가하기', { exact: true }).dispatchEvent('click');
     await page.waitForTimeout(1000);
     const addCancelledBatchCount = await page.evaluate(() => window.__edUploadBatches.length);
     if (addCancelledBatchCount !== 1 || await page.locator('#ed-picture-tools-prog').count()) {
@@ -456,7 +488,8 @@ async function main() {
     await openUploadPanel(page);
     await chooseFiles(page, png25);
     await waitForBatchCount(page, 1);
-    await page.locator('#EntryPopupContainer [class*="imbtn_pop_close"]').click({ force: true });
+    await page.locator('#EntryPopupContainer [class*="imbtn_pop_close"]')
+      .dispatchEvent('click');
     await page.waitForTimeout(1000);
     const closeCancelledBatchCount = await page.evaluate(() => window.__edUploadBatches.length);
     if (closeCancelledBatchCount !== 1 || await page.locator('#ed-picture-tools-prog').count()) {
