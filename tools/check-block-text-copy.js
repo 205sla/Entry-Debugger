@@ -391,6 +391,20 @@ async function main() {
     );
   }
 
+  const visualCases = [
+    [['계산', '(', '10', ')'], '계산 (10)'],
+    [['값', '[', '(', '10', ')', ']'], '값 [(10)]'],
+    [['가', ',', '나', '.', '다', ':', '라', ';', '10', '%'], '가, 나. 다: 라; 10%']
+  ];
+  for (const [parts, expected] of visualCases) {
+    const block = createBlock('visual_fields', null);
+    block.view._contents = parts.map(staticContent);
+    const actual = (await copyBlockText(block)).copiedText;
+    if (actual !== expected) {
+      throw new Error('Visual field copy differs: expected ' + expected + ', got ' + actual);
+    }
+  }
+
   await checkToastPaths();
 
   console.log('[check-block-text-copy] OK');

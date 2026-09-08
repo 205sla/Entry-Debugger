@@ -573,6 +573,7 @@
               '<span>콘솔 디버깅 아이디어 제공: aqu3180.co.kr</span>' +
               '<span>함수 사용 바로가기 아이디어 제공: kkomaweb.com</span>' +
               '<span>모양 탭 편의 기능 제작: Mingu Lee (github.com/wn12093)</span>' +
+              '<span>썸네일 변경 방식 참고: qwert1566 (github.com/qwert1566/changeThumb)</span>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -588,6 +589,19 @@
               '<span>아직 완성되지 않은 기능이 포함되어 있어 오류가 발생할 수 있습니다.</span>' +
             '</div>' +
             '<div class="ed-lab-controls">' +
+              '<div class="ed-thumbnail-tool" id="ed-thumbnail-tool">' +
+                '<strong>작품 썸네일 변경</strong>' +
+                '<p>이미지·GIF·영상을 선택해 미리보기 후 적용하세요. 영상/GIF는 APNG로 자동 변환합니다.</p>' +
+                '<p>최대 50MiB 입력 · 앞 6초 · 최대 480×270/12fps · 결과 900KB 이하로 자동 축소. 소리는 포함되지 않습니다.</p>' +
+                '<label>썸네일 파일 <input type="file" accept="image/png,image/apng,image/jpeg,image/webp,image/gif,video/*,.apng"></label>' +
+                '<img alt="변환한 썸네일 미리보기" hidden>' +
+                '<div class="ed-thumbnail-actions">' +
+                  '<button type="button" data-action="apply" disabled>썸네일 적용</button>' +
+                  '<button type="button" data-action="reset">취소 / 적용 해제</button>' +
+                '</div>' +
+                '<p class="ed-thumbnail-status" role="status" aria-live="polite">파일은 이 브라우저에서 변환합니다. 적용 후 작품을 직접 저장해야 반영됩니다.</p>' +
+                '<p>900KB는 호환성을 위한 보수적인 목표이며 서버 허용을 보장하지 않습니다. 실험실을 끄거나 새로고침하면 적용이 해제됩니다.</p>' +
+              '</div>' +
               '<div class="ed-lab-setting">' +
                 '<span class="ed-lab-text">' +
                   '<span class="ed-lab-title">프레임 프로파일러</span>' +
@@ -675,6 +689,7 @@
 
     bindSettingsControls();
     bindLabControls();
+    window.EntryDebuggerThumbnailUI.mount(panelEl);
     bindFunctionLibraryEvents();
     applyLabTabVisibility();
     renderFunctionLibraryList();
@@ -2302,6 +2317,8 @@
 
   function applySettings(settings, options) {
     extensionSettings = normalizeSettings(settings);
+    window.EntryDebuggerThumbnailUI.setEnabled(isEntryWorkspacePage() &&
+      extensionSettings.enabled && extensionSettings.debuggerTabEnabled && extensionSettings.labTabEnabled);
     settingsLoaded = true;
     applyBoostModeFeature({
       notifyRefresh: !!(options && options.notifyBoostModeRefresh)
@@ -2620,6 +2637,7 @@
   }
 
   function cleanupDebuggerTabFeature() {
+    window.EntryDebuggerThumbnailUI.unmount();
     sendToInject('STOP_POLLING');
 
     if (isDebuggerActive) {

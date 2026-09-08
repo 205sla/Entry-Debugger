@@ -26,6 +26,9 @@ npm run build:release
 npm run smoke:local
 npm run smoke:block-text-copy
 npm run smoke:picture-tools
+npm run smoke:frame-profiler
+npm run smoke:settings-sync
+npm run smoke:thumbnail
 ```
 
 - `npm run lint`: ESLint로 미정의 변수, 도달 불가 코드, 중복 `case`/키처럼 `node --check`가
@@ -34,20 +37,54 @@ npm run smoke:picture-tools
   있으며 이 명령만 `npm ci`가 필요합니다.
 - `npm run check`: manifest/README 버전, 확장 리소스, JS 문법, 설정 불변조건,
   page-core 주입 순서, 함수 템플릿 ID 재매핑, 블록 복사 토스트 경로,
-  프레임 프로파일러 특수 ID 안전성을 확인합니다. 의존성 없이 동작합니다.
+  프레임 프로파일러 특수 ID 안전성, 최소 권한에서의 설정 전파와 복사 괄호·구두점 처리를 확인합니다. 의존성 없이 동작합니다.
 - `npm run verify`: CI와 같은 순서로 lint, check, 개발용 빌드, 제출용 빌드를 모두 실행합니다.
 - `npm run build:dev`: 로컬 Entry 서버에서도 동작하는 개발용 확장을 `dist/entry-debugger-extension-dev/`에 생성합니다. Chrome match pattern 제약 때문에 개발용 manifest는 `http://127.0.0.1/*`, `http://localhost/*`를 포함하고, 실제 동작 여부는 content script 내부에서 `/ws/*`로 다시 제한합니다.
-- `npm run build:release`: 명시적으로 허용된 production 파일 26개만
+- `npm run build:release`: 명시적으로 허용된 production 파일 30개만
   `dist/entry-debugger-extension-release/`에 복사합니다. Chrome Web Store ZIP은 이 폴더의
   내용으로 생성합니다.
 - `npm run smoke:local`: 로컬 Entry 만들기 화면에서 Chromium 기반 확장 주입과 핵심 UI 동작을 확인합니다. PR 생성 또는 PR 브랜치 업데이트 직전에 실행합니다.
 - `npm run smoke:block-text-copy`: 실제 Entry 블록 모델과 Chromium 클립보드를 사용해
   반복문 안의 `만일~아니면` 텍스트 복사 결과를 확인합니다.
 - `npm run smoke:picture-tools`: 모양 명령·복제·재정렬·이름변경과 10개 업로드 경계, GIF 프레임 합산, 업로드 창 종료 취소를 Chromium에서 검증합니다.
+  업로드 창은 모의 DOM을 사용하므로 네이티브 파일 선택창과 서버 업로드 완료까지 검증하지는 않습니다.
+- `npm run smoke:frame-profiler`: 코드 이동과 일시정지·정지·재시작 수명주기를 검증합니다.
+- `npm run smoke:settings-sync`: 제출용 빌드와 새 프로필에서 실제 팝업 OFF/ON을 반복해
+  두 편집기의 설정 및 탭·패널 제거/복원을 검증합니다. 기본 대상은 공개 실사이트 작품이며
+  `ENTRY_DEBUGGER_SMOKE_URL`로 다른 `https://playentry.org/ws/*` 주소를 지정할 수 있습니다.
+  Chromium 경로는 `ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE`로 지정합니다.
 - `entry-debugger-extension/`은 production 원본이며, 실제 Chrome Web Store 제출에는
   allowlist로 생성한 `dist/entry-debugger-extension-release/`를 사용합니다.
 
 ## 사용 방법
+
+### 실험실: 작품 썸네일 변경
+
+디버깅 탭의 설정에서 **실험실 탭**을 켠 뒤 실험실의 **작품 썸네일 변경**에서
+PNG/APNG·JPEG·WebP·GIF 또는 Chrome에서 재생 가능한 영상을 선택합니다.
+미리보기를 확인하고 **썸네일 적용**을 누른 다음, 엔트리에서 작품을 직접 저장하세요.
+변환·적용 버튼 자체는 서버에 업로드하거나 작품을 저장하지 않습니다.
+
+- GIF·영상은 브라우저에서 APNG로 자동 변환합니다. 외부 변환 서비스나 원격 코드를 사용하지 않습니다.
+- 입력은 50MiB 이하, 원본 해상도는 1,600만 화소 이하입니다. 영상/애니메이션은 앞 6초 이내,
+  최대 480×270, 최대 12fps로 처리합니다. 비율을 유지하고 남는 영역은 투명하게 둡니다.
+- 결과가 900KB를 넘으면 해상도와 프레임 수를 단계적으로 줄입니다. 최종 크기·해상도·길이와
+  축소 여부를 표시하며, 한도 이내로 만들 수 없으면 적용하지 않습니다.
+  900KB는 참고 구현의 1MB 경고보다 보수적으로 잡은 목표이며, 확인된 Entry 서버 제한값이나 저장 성공 보장은 아닙니다.
+- **취소 / 적용 해제**, 실험실 OFF, 디버깅 OFF, 페이지 이동/새로고침으로 임시 적용을 해제합니다.
+  이미 저장된 썸네일을 바꾸려면 해제 후 작품을 다시 저장해야 합니다.
+- 적용 중에는 현재 작품 캔버스의 이미지 추출 결과도 선택한 썸네일로 바뀝니다.
+  원본 코덱을 Chrome이 지원하지 않으면 오류를 안내합니다. 영상 소리는 포함되지 않습니다.
+- 방식 참고: [qwert1566/changeThumb 1.0](https://github.com/qwert1566/changeThumb/releases/tag/1.0).
+  설정 크레딧에 GitHub ID를 표시하고, 배포본의 `THIRD_PARTY_NOTICES.txt`에 원본 MIT 고지를 포함합니다.
+- `npm run smoke:thumbnail`: 실제 Chromium의 GIF/APNG 프레임·표시 시간·투명도, 영상 길이/용량 축소,
+  오류·취소와 실제 Entry에서 선택/적용/해제/실험실 OFF 복원을 검사합니다. 작품 저장은 실행하지 않습니다.
+  `ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE`로 Chromium 실행 파일을 지정할 수 있습니다.
+- 2026-09-08 로그인된 Chrome의 비공개 테스트 작품에서 정적 PNG, GIF 변환 APNG,
+  영상 자동 축소 APNG의 실제 저장과 마이페이지 표시를 확인했습니다. 서버에서 받은 GIF·영상
+  결과에도 프레임과 재생 시간이 유지됐습니다. 상세 범위는 [실 서버 검증 기록](지식/thumbnail-experiment.md)을 참고하세요.
+
+### 기본 디버깅
 
 1. 확장 아이콘을 눌러 **디버거 활성화** 토글을 켭니다.
 2. 엔트리 작품 편집기 우측 패널에 **[디버깅] 탭**이 추가됩니다.
@@ -77,6 +114,9 @@ npm run smoke:picture-tools
 
 ## v2.6.3 변경사항
 
+- 실험실에 작품 썸네일 변경 추가: GIF·영상의 로컬 APNG 변환, 용량 자동 축소, 미리보기·적용 해제 지원
+- 팝업에서 바꾼 디버깅 탭 설정이 이미 열린 여러 편집기에 즉시 적용되도록 수정 (추가 권한 없음)
+- 블록 텍스트 복사에서 분리된 표시 필드의 닫는 괄호 앞 공백 제거 복원
 - 디버깅 탭을 끈 새 세션에서도 블록 텍스트 복사 성공·실패 알림이 표시되도록 수정
 - 프레임 프로파일러가 `__proto__`, `constructor`, `hasOwnProperty` 같은 특수 ID를
   안전하게 집계하도록 문자열 키 저장소 보강

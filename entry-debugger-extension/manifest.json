@@ -19,7 +19,7 @@
       "matches": [
         "https://playentry.org/ws/*"
       ],
-      "js": ["settings.js", "hangul-search.js", "function-library-templates.js", "content.js"],
+      "js": ["settings.js", "hangul-search.js", "function-library-templates.js", "thumbnail-media.js", "thumbnail-ui.js", "content.js"],
       "css": ["style.css"],
       "run_at": "document_start"
     }
@@ -40,6 +40,7 @@
         "single-block-drag.js",
         "high-quality-block-image.js",
         "picture-tools.js",
+        "thumbnail-override.js",
         "frame-profiler.js",
         "boost-mode.js",
         "turbo-mode.js"

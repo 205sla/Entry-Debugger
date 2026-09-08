@@ -30,9 +30,9 @@ function saveSettings(nextSettings, callback) {
 }
 
 function broadcastSettings(settings) {
-  chrome.tabs.query({ url: [
-    'https://playentry.org/ws/*'
-  ] }, function (tabs) {
+  // storage 권한만으로는 URL 필터를 조회할 수 없다. 민감한 탭 속성 없이
+  // ID만 받아 전달하고, 이 확장의 content script가 없는 탭은 아래에서 무시한다.
+  chrome.tabs.query({}, function (tabs) {
     tabs.forEach(function (tab) {
       chrome.tabs.sendMessage(tab.id, {
         type: 'APPLY_SETTINGS',

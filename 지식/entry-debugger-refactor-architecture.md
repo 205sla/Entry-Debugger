@@ -107,13 +107,26 @@ Chrome Web Store 제출 대비로 content script는 다음 범위로 제한했�
 | --- | ---: | --- |
 | `no-prototype-builtins`(frame-profiler) | 7 | 모든 문자열 키 맵을 null-prototype 사전으로 변경하고 특수 ID 회귀 검사 추가 |
 | `no-unused-vars` | 3 | `hasKeys`, `pg` ×2 제거 |
-| `no-useless-escape`(block-text-copy) | 3 | 동등한 정규식으로 정리 |
+| `no-useless-escape`(block-text-copy) | 3 | 정리 중 누락됐던 닫는 괄호를 2026-09-08 복원하고 최종 복사 문자열 검사 추가 |
 | `no-useless-assignment` | 2 | 분기 전 불필요한 초기값 제거 |
 | `no-useless-catch`(high-quality) | 1 | `finally`만 유지 |
 | 사용되지 않는 `eslint-disable`(picture-tools) | 1 | 과거 `no-loop-func` 억제 제거 |
 
 현재 결과는 **error 0 · warning 0**이며 `lint`는 `--max-warnings=0`으로 잠겨 있다.
 GitHub Actions도 `npm ci` 후 `npm run verify`를 실행해 lint/check/build를 PR 게이트로 사용한다.
+
+## 2026-09-08 팝업 설정 전파 수정
+
+기존 background의 URL 필터 탭 조회는 `storage` 권한만 가진 제출본에서 빈 배열을 반환했다.
+팝업이 OFF로 표시되고 저장값도 바뀌지만 이미 열린 편집기는 ON인 상태로 남았다.
+`broadcastSettings()`는 이제 `chrome.tabs.query({})`로 탭 ID를 받아 기존 `APPLY_SETTINGS`를
+전달한다. URL·제목 속성을 읽지 않으며, 이 확장의 content script가 없는 탭의 전송 실패는
+무시한다. 권한과 기존 메시지 프로토콜은 유지한다.
+
+`check-background`는 민감한 탭 속성이 없는 상황에서 여러 수신자 전달, 수신자 없는 탭,
+호환 SET_STATE와 명시적 재전송을 검사한다. `smoke:settings-sync`는 제출용 빌드의 실제
+팝업을 클릭해 두 편집기의 설정과 탭·패널을 확인한다. 저장소 값을 테스트가 직접 바꾸거나
+APPLY_SETTINGS를 주입하지 않으므로 전파 경로를 우회하지 않는다.
 
 ## 검증 포인트
 

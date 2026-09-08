@@ -31,6 +31,10 @@ const PRODUCTION_FILES = Object.freeze([
   'settings.js',
   'single-block-drag.js',
   'style.css',
+  'thumbnail-media.js',
+  'thumbnail-ui.js',
+  'thumbnail-override.js',
+  'THIRD_PARTY_NOTICES.txt',
   'turbo-mode.js'
 ]);
 

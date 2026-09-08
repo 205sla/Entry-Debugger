@@ -5,6 +5,7 @@ Entry Debugger 개발 중 확인한 Entry 내부 동작, 확장 프로그램 설
 ## 문서 목록
 
 - [Entry Debugger 할 일](./TODO.md)
+- [2.6.3 독립 검토 후 수정 계획 및 인계](./release-2.6.3-review-fix-plan.md)
 - [Entry Debugger 지식 관리 원칙](./entry-debugger-knowledge-management.md)
 - [Entry 속성 사용 위치 추적 분석](./entry-attribute-usage-reference.md)
 - [함수 내부 사용 위치 확장 설계](./function-internal-usage-extension.md)
@@ -26,6 +27,7 @@ Entry Debugger 개발 중 확인한 Entry 내부 동작, 확장 프로그램 설
 - [부스트/터보 모드 확장 기록](./entry-boost-turbo-mode-extension.md)
 - [개발용 빌드 Windows CRLF 정규화 (해결됨)](./build-dev-extension-windows-crlf.md)
 - [프레임 프로파일러](./frame-profiler-experiment.md)
+- [작품 썸네일 변경·APNG 변환](./thumbnail-experiment.md)
 - [EntryJS 4.56.0 × Entry Debugger 영향 분석](./entryjs-4.56.0-impact-analysis.md)
 
 ## 보관 (`_archive/`)

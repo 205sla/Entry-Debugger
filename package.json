@@ -5,14 +5,16 @@
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
-    "check": "node tools/check-extension.js && node tools/check-settings.js && node tools/check-page-core-loader.js && node tools/check-function-library.js && node tools/check-block-text-copy.js && node tools/check-frame-profiler.js",
+    "check": "node tools/check-extension.js && node tools/check-settings.js && node tools/check-background.js && node tools/check-page-core-loader.js && node tools/check-function-library.js && node tools/check-block-text-copy.js && node tools/check-frame-profiler.js && node tools/check-thumbnail-override.js",
     "verify": "npm run lint && npm run check && npm run build:dev && npm run build:release",
     "build:dev": "node tools/build-dev-extension.js",
     "build:release": "node tools/build-release-extension.js",
     "smoke:local": "node tools/smoke-local-extension.js",
     "smoke:block-text-copy": "node tools/smoke-block-text-copy.js",
     "smoke:picture-tools": "node tools/smoke-picture-tools.js",
-    "smoke:frame-profiler": "node tools/smoke-frame-profiler.js"
+    "smoke:frame-profiler": "node tools/smoke-frame-profiler.js",
+    "smoke:settings-sync": "node tools/smoke-settings-sync.js",
+    "smoke:thumbnail": "node tools/smoke-thumbnail.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
