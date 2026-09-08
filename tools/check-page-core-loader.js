@@ -91,7 +91,7 @@ const featureInjectionFunctions = Array.from(
   (match) => match[1]
 ).filter((name) => name !== 'injectPageScript');
 
-assert.strictEqual(featureInjectionFunctions.length, 12);
+assert.strictEqual(featureInjectionFunctions.length, 13);
 featureInjectionFunctions.forEach((name) => {
   const source = extractFunction(name);
   const coreCall = source.indexOf('injectPageCoreScripts();');

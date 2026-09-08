@@ -29,6 +29,7 @@ npm run smoke:picture-tools
 npm run smoke:frame-profiler
 npm run smoke:settings-sync
 npm run smoke:thumbnail
+npm run smoke:screen-capture
 ```
 
 - `npm run lint`: ESLint로 미정의 변수, 도달 불가 코드, 중복 `case`/키처럼 `node --check`가
@@ -40,7 +41,7 @@ npm run smoke:thumbnail
   프레임 프로파일러 특수 ID 안전성, 최소 권한에서의 설정 전파와 복사 괄호·구두점 처리를 확인합니다. 의존성 없이 동작합니다.
 - `npm run verify`: CI와 같은 순서로 lint, check, 개발용 빌드, 제출용 빌드를 모두 실행합니다.
 - `npm run build:dev`: 로컬 Entry 서버에서도 동작하는 개발용 확장을 `dist/entry-debugger-extension-dev/`에 생성합니다. Chrome match pattern 제약 때문에 개발용 manifest는 `http://127.0.0.1/*`, `http://localhost/*`를 포함하고, 실제 동작 여부는 content script 내부에서 `/ws/*`로 다시 제한합니다.
-- `npm run build:release`: 명시적으로 허용된 production 파일 30개만
+- `npm run build:release`: 명시적으로 허용된 production 파일 31개만
   `dist/entry-debugger-extension-release/`에 복사합니다. Chrome Web Store ZIP은 이 폴더의
   내용으로 생성합니다.
 - `npm run smoke:local`: 로컬 Entry 만들기 화면에서 Chromium 기반 확장 주입과 핵심 UI 동작을 확인합니다. PR 생성 또는 PR 브랜치 업데이트 직전에 실행합니다.
@@ -57,6 +58,33 @@ npm run smoke:thumbnail
   allowlist로 생성한 `dist/entry-debugger-extension-release/`를 사용합니다.
 
 ## 사용 방법
+
+### 설정: 실행화면 초고화질 캡처
+
+설정의 **블럭 이미지 초고화질 저장** 바로 아래에서 **실행화면 초고화질 캡처**를 켜세요(기본 OFF).
+실험실 탭과 독립적으로 동작합니다.
+실행 중에는 버튼 영역이 **일시정지하기 / 캡처하기**로 반씩 나뉩니다.
+왼쪽은 기존 일시정지 동작을 유지하고, 오른쪽 카메라 버튼은 화면을 캡처합니다.
+**캡처하기**를 누르면 엔진을 일시정지한 뒤 장면을 다시 렌더링해 PNG를 다운로드합니다.
+완료·실패 후 일시정지를 유지하며, 분할 전 크기로 돌아온 **다시 시작** 버튼으로 재개할 수 있습니다.
+
+- 기본 실행화면 480×270 기준 **1920×1080(4배)**. 실제 저장 크기를 완료 알림에 표시합니다.
+  화면 비율을 유지하며 출력은 최대 8,294,400픽셀, 한 변 8192 및 GPU 한도로 제한합니다.
+- SVG 원본과 글자·도형·펜을 목표 해상도로 다시 그립니다. 배경, 오브젝트, 글상자,
+  말풍선, 표시 중인 변수·리스트와 색상 효과를 포함합니다. 원본 비트맵과 이미 찍힌
+  비트맵 도장은 원본보다 세부 정보가 늘어나지 않습니다. 캔버스 밖 편집 UI·입력창은 제외됩니다.
+- 부스트의 실제 Canvas2D/WebGL 렌더러를 사용합니다. 부스트를 해제하거나 실행 tick을 추가하지
+  않으며 화면 크기·배율·효과 캐시는 캡처 후 복원합니다. 터보·프레임 프로파일러와 함께 사용할 수 있습니다.
+- 썸네일 임시 적용 중에도 실행화면을 캡처하며 썸네일 적용 상태는 유지됩니다.
+  기존 **블럭 이미지 초고화질 저장**과는 별도 기능입니다.
+- CORS·원본 이미지/글꼴 로딩·메모리 한도·인코딩 실패와 15초 시간 초과는 오류를 안내합니다.
+  처리 중 기능 OFF 또는 장면/작품/실행 상태 변경은 캡처를 취소합니다.
+- 방식 참고: [muno9748 / BetterEntryScreen](https://github.com/muno9748/BetterEntryScreen).
+  참고 커밋과 MIT 전문은 지식 문서 및 배포본 `THIRD_PARTY_NOTICES.txt`에 기록했습니다.
+- `npm run smoke:screen-capture`는 별도 Chromium 프로필의 실제 편집기에서 임시 테스트 장면을
+  만들고 다운로드 PNG를 독립 디코딩해 색상·구도·SVG 선명도·상태 보존을 검사합니다. 작품은 저장하지 않습니다.
+  `ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE`로 Chromium을 지정할 수 있습니다.
+  자세한 범위와 제한은 [검증 기록](지식/high-quality-screen-capture.md)을 참고하세요.
 
 ### 실험실: 작품 썸네일 변경
 
@@ -181,7 +209,7 @@ PNG/APNG·JPEG·WebP·GIF 또는 Chrome에서 재생 가능한 영상을 선택�
 ## v2.1.1 변경사항
 
 - 디버깅 탭 아이콘의 비활성 상태를 Entry 기본 속성 탭과 같은 연한 파란 배경 타일 스타일로 조정
-- 초고화질 이미지 저장하기 배율 슬라이더를 Entry 기본 슬라이더 느낌으로 조정
+- 블럭 이미지 초고화질 저장 배율 슬라이더를 Entry 기본 슬라이더 느낌으로 조정
 - 속성 검색으로 찾기 하위 선택 UI를 Entry 라디오 버튼 스타일에 맞게 조정
 
 ## v2.1.0 변경사항

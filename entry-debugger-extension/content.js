@@ -68,6 +68,7 @@
   let highQualityBlockImageScriptInjected = false;
   let pictureToolsScriptInjected = false;
   let frameProfilerScriptInjected = false;
+  let screenCaptureScriptInjected = false;
   let expandedListIds = new Set();  // 리스트 펼침 상태 추적
   let boostModeControlEl = null;
   let boostModeControlWaitStarted = false;
@@ -142,6 +143,12 @@
     injectPageCoreScripts();
     frameProfilerScriptInjected = true;
     injectPageScript('entry-debugger-frame-profiler', 'frame-profiler.js');
+  }
+
+  function injectScreenCaptureScript() {
+    injectPageCoreScripts();
+    screenCaptureScriptInjected = true;
+    injectPageScript('entry-debugger-screen-capture', 'high-quality-screen-capture.js');
   }
 
   function injectPageCoreScripts() {
@@ -532,10 +539,10 @@
             '</div>' +
             '<div class="ed-lab-setting">' +
               '<span class="ed-lab-text">' +
-                '<span class="ed-lab-title">초고화질 이미지 저장하기</span>' +
+                '<span class="ed-lab-title">블럭 이미지 초고화질 저장</span>' +
                 '<span class="ed-lab-desc">블록 이미지 저장 배율을 200%에서 2000%까지 조정</span>' +
               '</span>' +
-              '<label class="ed-lab-switch" aria-label="초고화질 이미지 저장하기">' +
+              '<label class="ed-lab-switch" aria-label="블럭 이미지 초고화질 저장">' +
                 '<input type="checkbox" id="ed-toggle-high-quality-block-image">' +
                 '<span class="ed-lab-slider"></span>' +
               '</label>' +
@@ -551,6 +558,16 @@
                   '<strong id="ed-high-quality-scale-warning" class="ed-lab-scale-warning">다운로드에 오래 걸릴 수 있습니다.</strong>' +
                 '</div>' +
               '</div>' +
+            '</div>' +
+            '<div class="ed-lab-setting">' +
+              '<span class="ed-lab-text">' +
+                '<span class="ed-lab-title">실행화면 초고화질 캡처</span>' +
+                '<span class="ed-lab-desc">실행화면을 일시정지하고 고화질 이미지로 저장</span>' +
+              '</span>' +
+              '<label class="ed-lab-switch" aria-label="실행화면 초고화질 캡처">' +
+                '<input type="checkbox" id="ed-toggle-screen-capture">' +
+                '<span class="ed-lab-slider"></span>' +
+              '</label>' +
             '</div>' +
             '<div class="ed-lab-setting">' +
               '<span class="ed-lab-text">' +
@@ -574,6 +591,7 @@
               '<span>함수 사용 바로가기 아이디어 제공: kkomaweb.com</span>' +
               '<span>모양 탭 편의 기능 제작: Mingu Lee (github.com/wn12093)</span>' +
               '<span>썸네일 변경 방식 참고: qwert1566 (github.com/qwert1566/changeThumb)</span>' +
+              '<span>실행화면 캡처 방식 참고: muno9748 (github.com/muno9748/BetterEntryScreen)</span>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -785,6 +803,9 @@
     bindSettingsToggle('#ed-toggle-picture-tools', function (checked) {
       saveSettingsFromPanel({ pictureToolsEnabled: checked });
     });
+    bindSettingsToggle('#ed-toggle-screen-capture', function (checked) {
+      saveSettingsFromPanel({ screenCaptureEnabled: checked });
+    });
     bindSettingsToggle('#ed-toggle-high-quality-block-image', function (checked) {
       saveSettingsFromPanel({ highQualityBlockImageEnabled: checked });
     });
@@ -852,6 +873,7 @@
     setSettingToggleChecked('#ed-toggle-block-text-copy', extensionSettings.blockTextCopyEnabled);
     setSettingToggleChecked('#ed-toggle-single-block-drag', extensionSettings.singleBlockDragEnabled);
     setSettingToggleChecked('#ed-toggle-picture-tools', extensionSettings.pictureToolsEnabled);
+    setSettingToggleChecked('#ed-toggle-screen-capture', extensionSettings.screenCaptureEnabled);
     setSettingToggleChecked('#ed-toggle-high-quality-block-image', extensionSettings.highQualityBlockImageEnabled);
     setSettingToggleChecked('#ed-toggle-setting-lab-tab', extensionSettings.labTabEnabled);
     renderDropdownSearchTargetControls();
@@ -872,6 +894,7 @@
 
   function bindLabControls() {
     if (!panelEl) return;
+
 
     var frameProfilerToggle = panelEl.querySelector('#ed-toggle-frame-profiler');
     if (frameProfilerToggle && frameProfilerToggle.dataset.bound !== 'true') {
@@ -906,6 +929,7 @@
 
   function renderLabControls() {
     if (!panelEl) return;
+
 
     var frameProfilerToggle = panelEl.querySelector('#ed-toggle-frame-profiler');
     if (frameProfilerToggle) {
@@ -1034,6 +1058,11 @@
       extensionSettings.labTabEnabled &&
       extensionSettings.frameProfilerEnabled
     );
+  }
+
+  function isScreenCaptureFeatureEnabled() {
+    return !!(isEntryWorkspacePage() && extensionSettings.enabled &&
+      extensionSettings.screenCaptureEnabled);
   }
 
   function isHighQualityBlockImageFeatureEnabled() {
@@ -2302,6 +2331,15 @@
     }, 150);
   }
 
+  function applyScreenCaptureFeature() {
+    if (isScreenCaptureFeatureEnabled()) injectScreenCaptureScript();
+    else if (!screenCaptureScriptInjected) return;
+    // Re-read settings when sending: rapid OFF/ON must not replay stale values.
+    setTimeout(function () {
+      sendToInject('SET_SCREEN_CAPTURE_ENABLED', { enabled: isScreenCaptureFeatureEnabled() });
+    }, 150);
+  }
+
   function applyHighQualityBlockImageFeature() {
     var shouldEnable = isHighQualityBlockImageFeatureEnabled();
     if (shouldEnable) {
@@ -2320,6 +2358,7 @@
     window.EntryDebuggerThumbnailUI.setEnabled(isEntryWorkspacePage() &&
       extensionSettings.enabled && extensionSettings.debuggerTabEnabled && extensionSettings.labTabEnabled);
     settingsLoaded = true;
+    applyScreenCaptureFeature();
     applyBoostModeFeature({
       notifyRefresh: !!(options && options.notifyBoostModeRefresh)
     });
@@ -2457,6 +2496,17 @@
         sendToInject('SET_FRAME_PROFILER_ENABLED', {
           enabled: isFrameProfilerFeatureEnabled()
         });
+        break;
+
+      case 'SCREEN_CAPTURE_READY':
+        if (!settingsLoaded) return;
+        sendToInject('SET_SCREEN_CAPTURE_ENABLED', { enabled: isScreenCaptureFeatureEnabled() });
+        break;
+
+      case 'SCREEN_CAPTURE_RESULT':
+        if (msg.payload && msg.payload.message) {
+          showToast(msg.payload.success ? 'success' : 'alert', '실행화면 캡처', msg.payload.message);
+        }
         break;
 
       case 'BLOCK_TEXT_COPY_TOAST':
@@ -2678,6 +2728,7 @@
     sendToInject('SET_SINGLE_BLOCK_DRAG_ENABLED', { enabled: false });
     sendToInject('SET_PICTURE_TOOLS_ENABLED', { enabled: false });
     sendToInject('SET_FRAME_PROFILER_ENABLED', { enabled: false });
+    sendToInject('SET_SCREEN_CAPTURE_ENABLED', { enabled: false });
     sendToInject('SET_HIGH_QUALITY_BLOCK_IMAGE_ENABLED', { enabled: false });
   }
 
@@ -2759,6 +2810,7 @@
     }
 
     applyBoostModeFeature();
+    applyScreenCaptureFeature();
     applyBoostModeControl();
     if (isTurboModeFeatureEnabled()) {
       startTurboModeFeature();

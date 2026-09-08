@@ -21,6 +21,7 @@
     blockTextCopyEnabled: false,
     pictureToolsEnabled: false,
     frameProfilerEnabled: false,
+    screenCaptureEnabled: false,
     singleBlockDragEnabled: false,
     highQualityBlockImageEnabled: false,
     highQualityBlockImageScale: 1000,
@@ -97,6 +98,7 @@
     var frameProfilerEnabled = typeof data.frameProfilerEnabled === 'boolean'
       ? data.frameProfilerEnabled
       : DEFAULT_SETTINGS.frameProfilerEnabled;
+    var screenCaptureEnabled = data.screenCaptureEnabled === true;
     var singleBlockDragEnabled = typeof data.singleBlockDragEnabled === 'boolean'
       ? data.singleBlockDragEnabled
       : DEFAULT_SETTINGS.singleBlockDragEnabled;
@@ -146,6 +148,7 @@
         frameProfilerEnabled ||
         singleBlockDragEnabled ||
         highQualityBlockImageEnabled ||
+        screenCaptureEnabled ||
         functionLibraryEnabled
       )
     );
@@ -179,6 +182,7 @@
       blockTextCopyEnabled: enabled && blockTextCopyEnabled,
       pictureToolsEnabled: enabled && pictureToolsEnabled,
       frameProfilerEnabled: enabled && frameProfilerEnabled,
+      screenCaptureEnabled: enabled && screenCaptureEnabled,
       singleBlockDragEnabled: enabled && singleBlockDragEnabled,
       highQualityBlockImageEnabled: enabled && highQualityBlockImageEnabled,
       highQualityBlockImageScale: highQualityBlockImageScale,

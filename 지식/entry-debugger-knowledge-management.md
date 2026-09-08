@@ -68,6 +68,8 @@
 ## 주의사항
 ```
 
+실행화면 초고화질 캡처는 설정 탭의 독립 기능이며 `screenCaptureEnabled: false`가 기본값이다. 실험실 OFF로 초기화하지 않는다.
+
 ## 실험실 기능 관리 규칙
 
 - 실험실 기능은 기본적으로 꺼져 있어야 한다.
@@ -105,7 +107,7 @@ highQualityBlockImageScale: 1000
 ## 현재 핵심 기능 문서
 
 - 속성 검색으로 찾기: `dropdown-search-experiment.md`
-- 초고화질 이미지 저장하기: `high-quality-block-image-experiment.md`
+- 블럭 이미지 초고화질 저장: `high-quality-block-image-experiment.md`
 - 함수 보관함: `function-library-experiment.md`
 - 함수 보관함 템플릿 추가 절차: `function-library-template-authoring.md`
 - 전체 지원 기능 요약: `entry-debugger-supported-features.md`

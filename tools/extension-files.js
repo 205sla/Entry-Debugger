@@ -19,6 +19,7 @@ const PRODUCTION_FILES = Object.freeze([
   'function-usage-inspector.js',
   'hangul-search.js',
   'high-quality-block-image.js',
+  'high-quality-screen-capture.js',
   'icon128.png',
   'icon48.png',
   'inject.js',

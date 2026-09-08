@@ -39,6 +39,7 @@
         "block-text-copy.js",
         "single-block-drag.js",
         "high-quality-block-image.js",
+        "high-quality-screen-capture.js",
         "picture-tools.js",
         "thumbnail-override.js",
         "frame-profiler.js",

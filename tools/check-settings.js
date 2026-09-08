@@ -22,6 +22,12 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 
 assert.strictEqual(defaults.blockTextCopyEnabled, false);
 assert.strictEqual(defaults.singleBlockDragEnabled, false);
+assert.strictEqual(defaults.screenCaptureEnabled, false);
+assert.strictEqual(normalize({enabled:false,screenCaptureEnabled:true}).screenCaptureEnabled,false);
+for (const overrides of [{debuggerTabEnabled:false},{labTabEnabled:false}]) {
+  assert.strictEqual(normalize(Object.assign({screenCaptureEnabled:true},overrides)).screenCaptureEnabled,true);
+}
+assert.strictEqual(normalize({labTabEnabled:true,screenCaptureEnabled:true}).screenCaptureEnabled,true);
 assert.deepStrictEqual(plain(normalize()), plain(defaults));
 assert.deepStrictEqual(
   plain(normalize({ pictureToolsEnabled: true })),
