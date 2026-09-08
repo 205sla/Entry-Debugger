@@ -5,6 +5,7 @@ Entry Debugger 개발 중 확인한 Entry 내부 동작, 확장 프로그램 설
 ## 문서 목록
 
 - [Entry Debugger 할 일](./TODO.md)
+- [2.7.0 스토어 제출 검토](./_archive/chrome-web-store-release-2.7.0.md)
 - [2.6.3 독립 검토 후 수정 계획 및 인계](./release-2.6.3-review-fix-plan.md)
 - [Entry Debugger 지식 관리 원칙](./entry-debugger-knowledge-management.md)
 - [Entry 속성 사용 위치 추적 분석](./entry-attribute-usage-reference.md)
