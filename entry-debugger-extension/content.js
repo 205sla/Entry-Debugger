@@ -1233,6 +1233,21 @@
     renderOthers(snapshot.others || [], searchTerm);
   }
 
+  function reconcileChildren(parent, children) {
+    var retained = new Set(children);
+    Array.from(parent.children).forEach(function (child) {
+      if (!retained.has(child)) child.remove();
+    });
+
+    // 같은 위치의 노드는 DOM에서 떼지 않는다. fragment로 옮겼다가 붙이면
+    // 입력창에 blur가 발생하고 스크롤·선택 영역·IME 조합 상태가 사라진다.
+    var next = parent.firstElementChild;
+    children.forEach(function (child) {
+      if (child !== next) parent.insertBefore(child, next);
+      next = child.nextElementSibling;
+    });
+  }
+
   function getScopeInfo(item) {
     if (item && item.scope) return item.scope;
 
@@ -1396,7 +1411,7 @@
       existingMap[card.dataset.id] = card;
     });
 
-    var fragment = document.createDocumentFragment();
+    var cards = [];
 
     filtered.forEach(function (v) {
       var existing = existingMap[v.id];
@@ -1415,14 +1430,13 @@
           }
         }
         updateScopeSelect(existing.querySelector('.ed-scope-select'), v);
-        fragment.appendChild(existing);
+        cards.push(existing);
       } else {
-        fragment.appendChild(createVariableCard(v));
+        cards.push(createVariableCard(v));
       }
     });
 
-    listEl.innerHTML = '';
-    listEl.appendChild(fragment);
+    reconcileChildren(listEl, cards);
   }
 
   function createVariableCard(v) {
@@ -1515,20 +1529,19 @@
       existingMap[card.dataset.kind] = card;
     });
 
-    var fragment = document.createDocumentFragment();
+    var cards = [];
 
     filtered.forEach(function (item) {
       var existing = existingMap[item.kind];
       if (existing) {
         updateOtherCard(existing, item);
-        fragment.appendChild(existing);
+        cards.push(existing);
       } else {
-        fragment.appendChild(createOtherCard(item));
+        cards.push(createOtherCard(item));
       }
     });
 
-    listEl.innerHTML = '';
-    listEl.appendChild(fragment);
+    reconcileChildren(listEl, cards);
   }
 
   function updateOtherCard(card, item) {
@@ -1676,20 +1689,19 @@
       existingMap[card.dataset.id] = card;
     });
 
-    var fragment = document.createDocumentFragment();
+    var cards = [];
 
     filtered.forEach(function (l) {
       var existing = existingMap[l.id];
       if (existing) {
         updateListCard(existing, l);
-        fragment.appendChild(existing);
+        cards.push(existing);
       } else {
-        fragment.appendChild(createListCard(l));
+        cards.push(createListCard(l));
       }
     });
 
-    listEl.innerHTML = '';
-    listEl.appendChild(fragment);
+    reconcileChildren(listEl, cards);
   }
 
   /**
@@ -1708,69 +1720,24 @@
     var body = card.querySelector('.ed-list-body');
     if (!body) return;
 
-    // 편집 중인 행이 있으면 행 갱신을 통째로 스킵 — 새 행을 그리면
-    // ed-editing 클래스와 사용자가 입력 중이던 값이 모두 사라진다.
-    if (body.querySelector('.ed-list-row.ed-editing')) return;
-
-    // 포커스된 입력 필드 위치 기억
-    var focusedIdx = -1;
-    var focusedValue = '';
-    var focusedSelStart = 0;
-    var focusedSelEnd = 0;
+    // 리스트 항목은 인덱스로 수정하므로 같은 인덱스의 행을 재사용한다.
+    // 편집 중인 행만 보호하고 나머지 항목은 계속 실시간으로 갱신한다.
     var rows = body.querySelectorAll('.ed-list-row');
-    for (var i = 0; i < rows.length; i++) {
-      var inp = rows[i].querySelector('.ed-list-input');
-      if (inp && document.activeElement === inp) {
-        focusedIdx = i;
-        focusedValue = inp.value;
-        focusedSelStart = inp.selectionStart || 0;
-        focusedSelEnd = inp.selectionEnd || 0;
-        break;
-      }
-    }
-
-    // 추가 바의 입력값 보존
     var addBar = body.querySelector('.ed-list-add');
-    var addInputValue = '';
-    if (addBar) {
-      var addInp = addBar.querySelector('.ed-list-add-input');
-      if (addInp) addInputValue = addInp.value;
-    }
-
-    // 기존 행 제거 (추가 바는 유지)
-    var oldRows = body.querySelectorAll('.ed-list-row');
-    oldRows.forEach(function (r) { r.remove(); });
-
-    // 새 행 삽입 (추가 바 앞에)
     l.items.forEach(function (item, idx) {
-      var row = createListRow(l, item, idx);
-
-      // 포커스 중이던 행은 사용자 입력값 유지
-      if (idx === focusedIdx) {
-        var rowInput = row.querySelector('.ed-list-input');
-        if (rowInput) rowInput.value = focusedValue;
+      var row = rows[idx];
+      if (!row) {
+        body.insertBefore(createListRow(l, item, idx), addBar);
+      } else if (!row.classList.contains('ed-editing')) {
+        var fullVal = String(item);
+        row.querySelector('.ed-list-input').value = fullVal;
+        var displayBtn = row.querySelector('.ed-list-display');
+        displayBtn.textContent = truncateForDisplay(fullVal);
+        displayBtn.title = fullVal;
       }
-
-      body.insertBefore(row, addBar);
     });
 
-    // 추가 바 입력값 복원
-    if (addBar) {
-      var restoredAddInp = addBar.querySelector('.ed-list-add-input');
-      if (restoredAddInp) restoredAddInp.value = addInputValue;
-    }
-
-    // 포커스 복원
-    if (focusedIdx >= 0 && focusedIdx < l.items.length) {
-      var newRows = body.querySelectorAll('.ed-list-row');
-      if (newRows[focusedIdx]) {
-        var restoreInput = newRows[focusedIdx].querySelector('.ed-list-input');
-        if (restoreInput) {
-          restoreInput.focus();
-          try { restoreInput.setSelectionRange(focusedSelStart, focusedSelEnd); } catch (e) {}
-        }
-      }
-    }
+    for (var i = l.items.length; i < rows.length; i++) rows[i].remove();
   }
 
   function createListCard(l) {
@@ -1932,19 +1899,18 @@
       existingMap[card.dataset.id] = card;
     });
 
-    var fragment = document.createDocumentFragment();
+    var cards = [];
 
     filtered.forEach(function (m) {
       var existing = existingMap[m.id];
       if (existing) {
-        fragment.appendChild(existing);
+        cards.push(existing);
       } else {
-        fragment.appendChild(createMessageCard(m));
+        cards.push(createMessageCard(m));
       }
     });
 
-    listEl.innerHTML = '';
-    listEl.appendChild(fragment);
+    reconcileChildren(listEl, cards);
   }
 
   function createMessageCard(m) {
@@ -1996,7 +1962,7 @@
       existingMap[card.dataset.id] = card;
     });
 
-    var fragment = document.createDocumentFragment();
+    var cards = [];
 
     filtered.forEach(function (s) {
       var existing = existingMap[s.id];
@@ -2004,14 +1970,13 @@
         // 이름 갱신
         var nameEl = existing.querySelector('.ed-scene-name');
         if (nameEl) nameEl.textContent = s.name;
-        fragment.appendChild(existing);
+        cards.push(existing);
       } else {
-        fragment.appendChild(createSceneCard(s));
+        cards.push(createSceneCard(s));
       }
     });
 
-    listEl.innerHTML = '';
-    listEl.appendChild(fragment);
+    reconcileChildren(listEl, cards);
   }
 
   function createSceneCard(s) {

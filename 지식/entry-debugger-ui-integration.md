@@ -59,3 +59,25 @@ Entry 기본 속성 패널의 사용 위치 목록은 다음 구조와 스타일
 - `debuggerTabEnabled` 꺼짐: `.propertyTabdebugging`과 `#ed-debugger-panel` 제거
 - `functionUsageEnabled` 꺼짐: `STOP_FUNCTION_USAGE_POLLING` 전송, `.ed-native-function-usage` 제거
 - 모두 꺼짐: 두 기능 모두 정리
+
+## 실시간 값 갱신 시 스크롤·편집 상태 유지
+
+확인 날짜: 2026-09-18
+
+`content.js`는 스냅샷을 받을 때 카드와 입력창을 연결된 DOM에 유지해야 한다.
+기존 카드를 `DocumentFragment`로 이동한 뒤 목록을 비우고 다시 붙이면 실제 Chromium에서
+입력창의 `blur`가 발생한다. 이때 `ed-editing`이 해제되어 다음 스냅샷이 입력 중인 값을
+덮어쓰고, 변수 목록의 스크롤 위치도 위로 이동했다.
+
+- 변수·리스트·기본 변수·신호·장면 카드에는 `reconcileChildren`을 사용한다.
+  사라진 카드만 제거하고, 같은 위치에 있는 카드는 이동시키지 않는다.
+- 펼친 리스트는 인덱스별 행을 재사용하고 추가·삭제된 행만 삽입·제거한다.
+  편집 중인 행의 값은 유지하면서 나머지 행은 계속 갱신한다.
+- 새 항목 입력창도 교체하거나 분리하지 않아 포커스와 선택 영역이 유지된다.
+
+회귀 검사: `npm run build:release` 후 `npm run smoke:live-values`.
+실제 `playentry.org` 편집기에 임시 변수 45개와 리스트 60개 항목을 추가하고,
+Entry 모델 변경 → 확장의 200ms 폴링 → UI 갱신 경로를 검사한다.
+확인 항목은 스크롤, 입력값·포커스·선택 방향, 적용 버튼·Enter, 새 항목 입력,
+행 증감·삭제, 변수 추가·제거·검색, 기본 변수 편집이다. 작품은 저장하지 않는다.
+결과와 화면 캡처는 `dist/live-values-evidence/`에 생성된다.

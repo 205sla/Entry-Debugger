@@ -14,6 +14,7 @@
     "smoke:picture-tools": "node tools/smoke-picture-tools.js",
     "smoke:frame-profiler": "node tools/smoke-frame-profiler.js",
     "smoke:settings-sync": "node tools/smoke-settings-sync.js",
+    "smoke:live-values": "node tools/smoke-live-values.js",
     "smoke:thumbnail": "node tools/smoke-thumbnail.js",
     "smoke:screen-capture": "node tools/smoke-screen-capture.js"
   },

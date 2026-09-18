@@ -28,6 +28,7 @@ npm run smoke:block-text-copy
 npm run smoke:picture-tools
 npm run smoke:frame-profiler
 npm run smoke:settings-sync
+npm run smoke:live-values
 npm run smoke:thumbnail
 npm run smoke:screen-capture
 ```
@@ -54,6 +55,10 @@ npm run smoke:screen-capture
   두 편집기의 설정 및 탭·패널 제거/복원을 검증합니다. 기본 대상은 공개 실사이트 작품이며
   `ENTRY_DEBUGGER_SMOKE_URL`로 다른 `https://playentry.org/ws/*` 주소를 지정할 수 있습니다.
   Chromium 경로는 `ENTRY_DEBUGGER_CHROMIUM_EXECUTABLE`로 지정합니다.
+- `npm run smoke:live-values`: 제출용 빌드를 실제 사이트의 임시 Chromium 프로필에 로드해
+  값 갱신 중 스크롤·포커스·입력값·선택 영역 유지, 값 적용, 리스트 추가·삭제와 검색을 검사합니다.
+  테스트 데이터는 브라우저 메모리에서만 변경하며 작품을 저장하지 않습니다.
+  URL과 Chromium 경로는 위 설정 동기화 검사와 같은 환경 변수로 지정합니다.
 - `entry-debugger-extension/`은 production 원본이며, 실제 Chrome Web Store 제출에는
   allowlist로 생성한 `dist/entry-debugger-extension-release/`를 사용합니다.
 
