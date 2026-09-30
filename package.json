@@ -16,6 +16,7 @@
     "smoke:settings-sync": "node tools/smoke-settings-sync.js",
     "smoke:live-values": "node tools/smoke-live-values.js",
     "smoke:thumbnail": "node tools/smoke-thumbnail.js",
+    "review:thumbnail": "node tools/serve-thumbnail-review.js",
     "smoke:screen-capture": "node tools/smoke-screen-capture.js"
   },
   "devDependencies": {

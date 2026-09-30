@@ -29,7 +29,8 @@ Entry Debugger 개발 중 확인한 Entry 내부 동작, 확장 프로그램 설
 - [부스트/터보 모드 확장 기록](./entry-boost-turbo-mode-extension.md)
 - [개발용 빌드 Windows CRLF 정규화 (해결됨)](./build-dev-extension-windows-crlf.md)
 - [프레임 프로파일러](./frame-profiler-experiment.md)
-- [작품 썸네일 변경·APNG 변환](./thumbnail-experiment.md)
+- [썸네일 관리자·저장 후 유지](./thumbnail-manager.md)
+- [작품 썸네일 변경·APNG 변환 (이전 실험실 구현)](./thumbnail-experiment.md)
 - [EntryJS 4.56.0 × Entry Debugger 영향 분석](./entryjs-4.56.0-impact-analysis.md)
 
 ## 보관 (`_archive/`)

@@ -145,13 +145,13 @@ async function main() {
     console.log('[smoke-thumbnail] GIF/APNG pixels and timing, transparency, invalid files, cancellation, video size reduction passed');
     // Real Entry + production content scripts. No project save or network upload is performed.
     const page = await context.newPage();
-    await worker.evaluate(() => chrome.storage.local.set({ enabled: true, debuggerTabEnabled: true, labTabEnabled: true }));
+    await worker.evaluate(() => chrome.storage.local.set({ enabled: true, debuggerTabEnabled: true, labTabEnabled: false, thumbnailManagerEnabled: true }));
     await page.goto(process.env.ENTRY_DEBUGGER_SMOKE_URL || 'https://playentry.org/ws/590e746f150c3963bf86078e', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.propertyTabdebugging', { timeout: 60000 });
     // Entry's first-visit guide overlays the editor in a fresh profile.
     await page.addStyleTag({ content: '.tooltipGuide { display: none !important; }' });
     await page.locator('.propertyTabdebugging').click();
-    await page.locator('.ed-subtab[data-tab="others"]').click();
+    await page.locator('.ed-subtab[data-tab="thumbnail"]').click();
     await page.evaluate(() => { window.__thumbnailOriginal = Entry.canvas_.toDataURL; });
     const input = page.locator('#ed-thumbnail-tool input');
     await input.setInputFiles({ name: 'test.gif', mimeType: 'image/gif', buffer: Buffer.from(gif, 'base64') });
@@ -171,11 +171,11 @@ async function main() {
     await apply.click();
     await page.waitForFunction(() => Entry.canvas_.toDataURL !== window.__thumbnailOriginal);
     await page.locator('#ed-settings-tab-btn').click();
-    await page.locator('.ed-lab-switch[aria-label="실험실 탭"]').click();
+    await page.locator('.ed-lab-switch[aria-label="썸네일 관리자"]').click();
     await page.waitForFunction(() => Entry.canvas_.toDataURL === window.__thumbnailOriginal);
     console.log(JSON.stringify({ gif: { ...gifPng, centers: undefined }, video: { bytes: videoPng.size,
       width: videoPng.width, frames: videoPng.declaredFrames }, malformedAndCancel: true,
-      realEntry: 'GIF selection, preview, apply, reset, lab-disable restoration passed; no save' }, null, 2));
+      realEntry: 'Independent manager tab, GIF preview/apply, remove, manager-disable restoration passed; no save' }, null, 2));
   } finally {
     if (context) await context.close();
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 });

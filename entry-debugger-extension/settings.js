@@ -22,6 +22,7 @@
     pictureToolsEnabled: false,
     frameProfilerEnabled: false,
     screenCaptureEnabled: false,
+    thumbnailManagerEnabled: false,
     singleBlockDragEnabled: false,
     highQualityBlockImageEnabled: false,
     highQualityBlockImageScale: 1000,
@@ -36,6 +37,7 @@
     'boostModeControlVisible',
     'singleBlockDragEnabled',
     'pictureToolsEnabled',
+    'thumbnailManagerEnabled',
     'functionPrivateVariablesEnabled',
     'labTabEnabled'
   ];
@@ -99,6 +101,7 @@
       ? data.frameProfilerEnabled
       : DEFAULT_SETTINGS.frameProfilerEnabled;
     var screenCaptureEnabled = data.screenCaptureEnabled === true;
+    var thumbnailManagerEnabled = data.thumbnailManagerEnabled === true;
     var singleBlockDragEnabled = typeof data.singleBlockDragEnabled === 'boolean'
       ? data.singleBlockDragEnabled
       : DEFAULT_SETTINGS.singleBlockDragEnabled;
@@ -149,6 +152,7 @@
         singleBlockDragEnabled ||
         highQualityBlockImageEnabled ||
         screenCaptureEnabled ||
+        thumbnailManagerEnabled ||
         functionLibraryEnabled
       )
     );
@@ -183,6 +187,7 @@
       pictureToolsEnabled: enabled && pictureToolsEnabled,
       frameProfilerEnabled: enabled && frameProfilerEnabled,
       screenCaptureEnabled: enabled && screenCaptureEnabled,
+      thumbnailManagerEnabled: enabled && thumbnailManagerEnabled,
       singleBlockDragEnabled: enabled && singleBlockDragEnabled,
       highQualityBlockImageEnabled: enabled && highQualityBlockImageEnabled,
       highQualityBlockImageScale: highQualityBlockImageScale,

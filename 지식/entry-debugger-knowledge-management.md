@@ -69,6 +69,7 @@
 ```
 
 실행화면 초고화질 캡처는 설정 탭의 독립 기능이며 `screenCaptureEnabled: false`가 기본값이다. 실험실 OFF로 초기화하지 않는다.
+썸네일 관리자도 설정의 독립 기능이며 `thumbnailManagerEnabled: false`가 기본값이다. 실험실 OFF로 초기화하지 않는다.
 
 ## 실험실 기능 관리 규칙
 
@@ -101,13 +102,15 @@ dropdownSearchBlockMenuEnabled: true,
 dropdownSearchPropertyPanelEnabled: true,
 blockTextCopyEnabled: false,
 highQualityBlockImageEnabled: false,
-highQualityBlockImageScale: 1000
+highQualityBlockImageScale: 1000,
+thumbnailManagerEnabled: false
 ```
 
 ## 현재 핵심 기능 문서
 
 - 속성 검색으로 찾기: `dropdown-search-experiment.md`
 - 블럭 이미지 초고화질 저장: `high-quality-block-image-experiment.md`
+- 썸네일 관리자: `thumbnail-manager.md`
 - 함수 보관함: `function-library-experiment.md`
 - 함수 보관함 템플릿 추가 절차: `function-library-template-authoring.md`
 - 전체 지원 기능 요약: `entry-debugger-supported-features.md`

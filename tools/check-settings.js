@@ -23,6 +23,11 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 assert.strictEqual(defaults.blockTextCopyEnabled, false);
 assert.strictEqual(defaults.singleBlockDragEnabled, false);
 assert.strictEqual(defaults.screenCaptureEnabled, false);
+assert.strictEqual(defaults.thumbnailManagerEnabled, false);
+assert.strictEqual(normalize({enabled:false,thumbnailManagerEnabled:true}).thumbnailManagerEnabled,false);
+for (const overrides of [{debuggerTabEnabled:false},{labTabEnabled:false}]) {
+  assert.strictEqual(normalize(Object.assign({thumbnailManagerEnabled:true},overrides)).thumbnailManagerEnabled,true);
+}
 assert.strictEqual(normalize({enabled:false,screenCaptureEnabled:true}).screenCaptureEnabled,false);
 for (const overrides of [{debuggerTabEnabled:false},{labTabEnabled:false}]) {
   assert.strictEqual(normalize(Object.assign({screenCaptureEnabled:true},overrides)).screenCaptureEnabled,true);

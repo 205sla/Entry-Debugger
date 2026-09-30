@@ -395,6 +395,9 @@
           }) +
           buildSettingsSectionHTML() +
           buildLabSectionHTML() +
+          '<div class="ed-section ed-thumbnail-only" id="ed-section-thumbnail">' +
+            window.EntryDebuggerThumbnailUI.html() +
+          '</div>' +
           buildFunctionLibrarySectionHTML() +
         '</div>' +
       '</div>'
@@ -411,6 +414,7 @@
             '<button class="ed-subtab" data-tab="scenes">장면</button>' +
             '<span class="ed-subtab-separator ed-optional-only" aria-hidden="true"></span>' +
             '<button class="ed-subtab ed-lab-only" data-tab="others">실험실</button>' +
+            '<button class="ed-subtab ed-thumbnail-only" data-tab="thumbnail">썸네일 관리자</button>' +
             '<button class="ed-subtab ed-function-library-only" data-tab="function-library">함수 보관함</button>' +
           '</div>' +
           '<div class="ed-toolbar-right">' +
@@ -571,6 +575,16 @@
             '</div>' +
             '<div class="ed-lab-setting">' +
               '<span class="ed-lab-text">' +
+                '<span class="ed-lab-title">썸네일 관리자</span>' +
+                '<span class="ed-lab-desc">현재 썸네일 확인, 새 이미지 적용과 자동 썸네일 전환</span>' +
+              '</span>' +
+              '<label class="ed-lab-switch" aria-label="썸네일 관리자">' +
+                '<input type="checkbox" id="ed-toggle-thumbnail-manager">' +
+                '<span class="ed-lab-slider"></span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="ed-lab-setting">' +
+              '<span class="ed-lab-text">' +
                 '<span class="ed-lab-title">실험실 탭</span>' +
                 '<span class="ed-lab-desc">실험 기능과 기본 변수 디버깅 표시</span>' +
               '</span>' +
@@ -607,19 +621,6 @@
               '<span>아직 완성되지 않은 기능이 포함되어 있어 오류가 발생할 수 있습니다.</span>' +
             '</div>' +
             '<div class="ed-lab-controls">' +
-              '<div class="ed-thumbnail-tool" id="ed-thumbnail-tool">' +
-                '<strong>작품 썸네일 변경</strong>' +
-                '<p>이미지·GIF·영상을 선택해 미리보기 후 적용하세요. 영상/GIF는 APNG로 자동 변환합니다.</p>' +
-                '<p>최대 50MiB 입력 · 앞 6초 · 최대 480×270/12fps · 결과 900KB 이하로 자동 축소. 소리는 포함되지 않습니다.</p>' +
-                '<label>썸네일 파일 <input type="file" accept="image/png,image/apng,image/jpeg,image/webp,image/gif,video/*,.apng"></label>' +
-                '<img alt="변환한 썸네일 미리보기" hidden>' +
-                '<div class="ed-thumbnail-actions">' +
-                  '<button type="button" data-action="apply" disabled>썸네일 적용</button>' +
-                  '<button type="button" data-action="reset">취소 / 적용 해제</button>' +
-                '</div>' +
-                '<p class="ed-thumbnail-status" role="status" aria-live="polite">파일은 이 브라우저에서 변환합니다. 적용 후 작품을 직접 저장해야 반영됩니다.</p>' +
-                '<p>900KB는 호환성을 위한 보수적인 목표이며 서버 허용을 보장하지 않습니다. 실험실을 끄거나 새로고침하면 적용이 해제됩니다.</p>' +
-              '</div>' +
               '<div class="ed-lab-setting">' +
                 '<span class="ed-lab-text">' +
                   '<span class="ed-lab-title">프레임 프로파일러</span>' +
@@ -741,6 +742,13 @@
     target.classList.add('ed-section-active');
 
     currentPanelTabName = tabName;
+    var searchWrap = panelEl.querySelector('.ed-search-wrap');
+    if (searchWrap) searchWrap.style.display = tabName === 'thumbnail' ? 'none' : '';
+    if (tabName === 'thumbnail') {
+      var scrollArea = panelEl.querySelector('.ed-scroll-area');
+      if (scrollArea) scrollArea.scrollTop = 0;
+      window.EntryDebuggerThumbnailUI.refresh();
+    }
     if (tabName !== 'settings') {
       previousPanelTabName = tabName;
     }
@@ -805,6 +813,9 @@
     });
     bindSettingsToggle('#ed-toggle-screen-capture', function (checked) {
       saveSettingsFromPanel({ screenCaptureEnabled: checked });
+    });
+    bindSettingsToggle('#ed-toggle-thumbnail-manager', function (checked) {
+      saveSettingsFromPanel({ thumbnailManagerEnabled: checked });
     });
     bindSettingsToggle('#ed-toggle-high-quality-block-image', function (checked) {
       saveSettingsFromPanel({ highQualityBlockImageEnabled: checked });
@@ -874,6 +885,7 @@
     setSettingToggleChecked('#ed-toggle-single-block-drag', extensionSettings.singleBlockDragEnabled);
     setSettingToggleChecked('#ed-toggle-picture-tools', extensionSettings.pictureToolsEnabled);
     setSettingToggleChecked('#ed-toggle-screen-capture', extensionSettings.screenCaptureEnabled);
+    setSettingToggleChecked('#ed-toggle-thumbnail-manager', extensionSettings.thumbnailManagerEnabled);
     setSettingToggleChecked('#ed-toggle-high-quality-block-image', extensionSettings.highQualityBlockImageEnabled);
     setSettingToggleChecked('#ed-toggle-setting-lab-tab', extensionSettings.labTabEnabled);
     renderDropdownSearchTargetControls();
@@ -1103,6 +1115,7 @@
 
     var visible = isLabTabFeatureEnabled();
     var functionLibraryVisible = isFunctionLibraryFeatureEnabled();
+    var thumbnailVisible = extensionSettings.enabled && extensionSettings.thumbnailManagerEnabled;
     panelEl.querySelectorAll('.ed-lab-only').forEach(function (el) {
       el.style.display = visible ? '' : 'none';
     });
@@ -1110,12 +1123,17 @@
       el.style.display = functionLibraryVisible ? '' : 'none';
     });
     panelEl.querySelectorAll('.ed-optional-only').forEach(function (el) {
-      el.style.display = (visible || functionLibraryVisible) ? '' : 'none';
+      el.style.display = (visible || functionLibraryVisible || thumbnailVisible) ? '' : 'none';
+    });
+    panelEl.querySelectorAll('.ed-thumbnail-only').forEach(function (el) {
+      el.style.display = thumbnailVisible ? '' : 'none';
     });
 
     var labSection = panelEl.querySelector('#ed-section-others');
     var functionLibrarySection = panelEl.querySelector('#ed-section-function-library');
+    var thumbnailSection = panelEl.querySelector('#ed-section-thumbnail');
     var activeHidden =
+      (!thumbnailVisible && thumbnailSection && thumbnailSection.classList.contains('ed-section-active')) ||
       (!visible && labSection && labSection.classList.contains('ed-section-active')) ||
       (!functionLibraryVisible && functionLibrarySection && functionLibrarySection.classList.contains('ed-section-active'));
 
@@ -2321,7 +2339,7 @@
   function applySettings(settings, options) {
     extensionSettings = normalizeSettings(settings);
     window.EntryDebuggerThumbnailUI.setEnabled(isEntryWorkspacePage() &&
-      extensionSettings.enabled && extensionSettings.debuggerTabEnabled && extensionSettings.labTabEnabled);
+      extensionSettings.enabled && extensionSettings.thumbnailManagerEnabled);
     settingsLoaded = true;
     applyScreenCaptureFeature();
     applyBoostModeFeature({
@@ -2773,6 +2791,8 @@
       cleanup();
       return;
     }
+
+    window.EntryDebuggerThumbnailUI.setEnabled(extensionSettings.thumbnailManagerEnabled);
 
     applyBoostModeFeature();
     applyScreenCaptureFeature();
